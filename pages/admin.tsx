@@ -303,8 +303,7 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
       ];
     case "projects":
       return [
-        idCol,
-        { field: "name", minWidth: 160 },
+        { field: "name", minWidth: 160, sort: "asc" as const },
         { field: "is_roadmap", headerName: "Roadmap", maxWidth: 90 },
         { field: "period", minWidth: 100 },
         {
@@ -321,7 +320,6 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
         { field: "challenges", minWidth: 200, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
         { field: "result", minWidth: 200, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
         { field: "ai_summary", headerName: "Résumé IA", minWidth: 250, editable: false, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
-        { field: "sort_order", maxWidth: 80 },
       ];
     case "incidents":
       return [
@@ -392,6 +390,14 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
   }
 }
 
+function loadLocal<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+}
+function saveLocal(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
+}
+
 export default function AdminPage() {
   const [table, setTable] = useState("releases");
   const [meta, setMeta] = useState<AdminMeta | null>(null);
@@ -400,7 +406,24 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [releaseFilters, setReleaseFilters] = useState<ReleaseFilters>(DEFAULT_RELEASE_FILTERS);
+  const [releaseFilters, setReleaseFiltersRaw] = useState<ReleaseFilters>(DEFAULT_RELEASE_FILTERS);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Restore persisted state after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const savedTable = loadLocal("admin:table", "releases");
+    const savedFilters = loadLocal("admin:releaseFilters", DEFAULT_RELEASE_FILTERS);
+    setTable(savedTable);
+    setReleaseFiltersRaw(savedFilters);
+    setHydrated(true);
+  }, []);
+  const setReleaseFilters: typeof setReleaseFiltersRaw = useCallback((v) => {
+    setReleaseFiltersRaw((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      saveLocal("admin:releaseFilters", next);
+      return next;
+    });
+  }, []);
   // Map: releaseId → project ids for the releases view
   const [releaseProjectMap, setReleaseProjectMap] = useState<Map<number, number[]>>(new Map());
   // Checkbox selection for bulk project association
@@ -439,8 +462,8 @@ export default function AdminPage() {
   }, [loadReleaseProjects]);
 
   useEffect(() => {
-    loadTable(table);
-  }, [table, loadTable]);
+    if (hydrated) loadTable(table);
+  }, [table, loadTable, hydrated]);
 
   const handleSave = useCallback(async (changed: Row[]) => {
     await adminApi.batchUpdate(table, changed);
@@ -524,43 +547,48 @@ export default function AdminPage() {
   }, [rows, table, releaseFilters, releaseProjectMap]);
 
   return (
-    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#0f172a", color: "#e2e8f0", fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: "#000f25", color: "#f1faee", fontFamily: "system-ui, sans-serif", "--color-live": "#be0a25" } as React.CSSProperties}>
       {/* Sidebar */}
       {sidebarOpen && (
         <div style={{
-          width: 160, borderRight: "1px solid #1e293b", padding: "12px 0",
+          width: 160, borderRight: "1px solid #2e4a6e", padding: "12px 0",
           display: "flex", flexDirection: "column", flexShrink: 0, overflowY: "auto",
+          background: "#000f25",
         }}>
-          <div style={{ padding: "0 12px 12px", borderBottom: "1px solid #1e293b", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h1 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#f8fafc" }}>Admin</h1>
+          <div style={{ padding: "0 12px 12px", borderBottom: "1px solid #2e4a6e", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo_ie_mobile.svg" alt="logo" width={20} height={20} />
+              <h1 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#f1faee" }}>EM Board</h1>
+            </div>
             <button onClick={() => setSidebarOpen(false)}
-              style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}
+              style={{ background: "none", border: "none", color: "#457b9d", cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}
               title="Masquer le menu">
               &laquo;
             </button>
           </div>
           {TABLE_GROUPS.map((group) => (
             <div key={group.label} style={{ padding: "8px 0 2px" }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", textTransform: "uppercase", padding: "0 12px 4px", letterSpacing: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "#457b9d", textTransform: "uppercase", padding: "0 12px 4px", letterSpacing: 1 }}>
                 {group.label}
               </div>
               {group.tables.map((t) => (
-                <button key={t.key} onClick={() => { setTable(t.key); setSelectedRow(null); setReleaseFilters(DEFAULT_RELEASE_FILTERS); }}
+                <button key={t.key} onClick={() => { setTable(t.key); saveLocal("admin:table", t.key); setSelectedRow(null); setReleaseFilters(DEFAULT_RELEASE_FILTERS); }}
                   style={{
                     display: "block", width: "100%", textAlign: "left",
                     padding: "5px 12px", border: "none", cursor: "pointer",
                     fontSize: 11, fontWeight: table === t.key ? 600 : 400,
-                    background: table === t.key ? "#1e293b" : "transparent",
-                    color: table === t.key ? "#6366f1" : "#94a3b8",
-                    borderLeft: table === t.key ? "2px solid #6366f1" : "2px solid transparent",
+                    background: table === t.key ? "#0f2440" : "transparent",
+                    color: table === t.key ? "#a8dadc" : "#f1faee",
+                    borderLeft: table === t.key ? "2px solid #a8dadc" : "2px solid transparent",
                   }}>
                   {t.label}
                 </button>
               ))}
             </div>
           ))}
-          <div style={{ marginTop: "auto", padding: "8px 12px", borderTop: "1px solid #1e293b" }}>
-            <a href="/board" style={{ fontSize: 10, color: "#64748b", textDecoration: "none" }}>
+          <div style={{ marginTop: "auto", padding: "8px 12px", borderTop: "1px solid #2e4a6e" }}>
+            <a href="/board" style={{ fontSize: 10, color: "#457b9d", textDecoration: "none" }}>
               &larr; Board
             </a>
           </div>
@@ -572,53 +600,53 @@ export default function AdminPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           {!sidebarOpen && (
             <button onClick={() => setSidebarOpen(true)}
-              style={{ background: "none", border: "1px solid #334155", borderRadius: 4, color: "#64748b", cursor: "pointer", fontSize: 14, padding: "1px 6px", lineHeight: 1 }}
+              style={{ background: "none", border: "1px solid #2e4a6e", borderRadius: 4, color: "#457b9d", cursor: "pointer", fontSize: 14, padding: "1px 6px", lineHeight: 1 }}
               title="Afficher le menu">
               &raquo;
             </button>
           )}
-          <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#f8fafc" }}>{currentLabel}</h2>
-          {error && <span style={{ color: "#f87171", fontSize: 11 }}>{error}</span>}
+          <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "#f1faee" }}>{currentLabel}</h2>
+          {error && <span style={{ color: "#e63946", fontSize: 11 }}>{error}</span>}
         </div>
         {table === "releases" && (
           <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
             <select value={releaseFilters.year} onChange={(e) => setReleaseFilters((f) => ({ ...f, year: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Année</option>
               {availableYears.map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
             <select value={releaseFilters.month} onChange={(e) => setReleaseFilters((f) => ({ ...f, month: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Mois</option>
               {MONTH_LABELS.map((label, i) => <option key={i} value={String(i + 1)}>{label}</option>)}
             </select>
             <select value={releaseFilters.developerId} onChange={(e) => setReleaseFilters((f) => ({ ...f, developerId: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Dev</option>
               {meta?.developers.map((d) => <option key={d.id} value={String(d.id)}>{d.display_name}</option>)}
             </select>
             <select value={releaseFilters.repositoryId} onChange={(e) => setReleaseFilters((f) => ({ ...f, repositoryId: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Repo</option>
               {meta?.repositories.map((r) => <option key={r.id} value={String(r.id)}>{r.name.replace(/^indb-/, "")}</option>)}
             </select>
             <select value={releaseFilters.releaseType} onChange={(e) => setReleaseFilters((f) => ({ ...f, releaseType: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Type</option>
               {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={releaseFilters.projectId} onChange={(e) => setReleaseFilters((f) => ({ ...f, projectId: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Projet</option>
               <option value="none">Sans projet</option>
               {meta?.projects.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
             </select>
             <input type="text" placeholder="Rechercher..."
               value={releaseFilters.search} onChange={(e) => setReleaseFilters((f) => ({ ...f, search: e.target.value }))}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, minWidth: 140, flex: 1, outline: "none" }} />
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, minWidth: 140, flex: 1, outline: "none" }} />
             {(releaseFilters.year !== "all" || releaseFilters.month !== "all" || releaseFilters.developerId !== "all" || releaseFilters.repositoryId !== "all" || releaseFilters.releaseType !== "all" || releaseFilters.projectId !== "all" || releaseFilters.search) && (
               <button onClick={() => setReleaseFilters(DEFAULT_RELEASE_FILTERS)}
-                style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 10, cursor: "pointer" }}>
+                style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #2e4a6e", background: "transparent", color: "#457b9d", fontSize: 10, cursor: "pointer" }}>
                 Reset
               </button>
             )}
@@ -627,32 +655,32 @@ export default function AdminPage() {
         {table === "releases" && checkedReleaseIds.length > 0 && (
           <div style={{
             display: "flex", gap: 6, marginBottom: 6, alignItems: "center",
-            padding: "5px 10px", background: "#1e293b", borderRadius: 6, border: "1px solid #334155",
+            padding: "5px 10px", background: "#000f25", borderRadius: 6, border: "1px solid #2e4a6e",
           }}>
-            <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 600, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 11, color: "#f1faee", fontWeight: 600, whiteSpace: "nowrap" }}>
               {checkedReleaseIds.length} sel.
             </span>
             <select value={bulkProjectId} onChange={(e) => setBulkProjectId(e.target.value)}
-              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#0f172a", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #2e4a6e", background: "#000f25", color: "#f1faee", fontSize: 11, cursor: "pointer" }}>
               <option value="">— Projet —</option>
               {meta?.projects.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
             </select>
             <button onClick={handleBulkLinkProject} disabled={!bulkProjectId}
               style={{
                 padding: "3px 10px", borderRadius: 4, border: "none", cursor: bulkProjectId ? "pointer" : "default",
-                background: bulkProjectId ? "#6366f1" : "#334155", color: "#fff", fontSize: 11, fontWeight: 600,
+                background: bulkProjectId ? "#457b9d" : "#2e4a6e", color: "#f1faee", fontSize: 11, fontWeight: 600,
                 opacity: bulkProjectId ? 1 : 0.5,
               }}>
               Associer
             </button>
             <button onClick={() => setCheckedReleaseIds([])}
-              style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 11 }}>
+              style={{ background: "none", border: "none", color: "#457b9d", cursor: "pointer", fontSize: 11 }}>
               ✕
             </button>
           </div>
         )}
         {loading ? (
-          <div style={{ color: "#64748b", padding: 40, textAlign: "center" }}>Loading...</div>
+          <div style={{ color: "#457b9d", padding: 40, textAlign: "center" }}>Loading...</div>
         ) : (
           <AdminGrid
             rows={filteredRows}

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useMemo } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect } from "react";
 import { AgGridReact } from "ag-grid-react";
 import {
   AllCommunityModule,
@@ -6,20 +6,27 @@ import {
   themeQuartz,
   type ColDef,
   type CellValueChangedEvent,
+  type GridReadyEvent,
+  type FilterChangedEvent,
+  type SortChangedEvent,
+  type ColumnResizedEvent,
+  type ColumnMovedEvent,
+  type PaginationChangedEvent,
 } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 const darkTheme = themeQuartz.withParams({
-  backgroundColor: "#0f172a",
-  foregroundColor: "#e2e8f0",
-  headerBackgroundColor: "#1e293b",
-  headerTextColor: "#94a3b8",
-  oddRowBackgroundColor: "#0f172a",
-  rowHoverColor: "#1e293b",
-  borderColor: "#1e293b",
-  accentColor: "#6366f1",
-  chromeBackgroundColor: "#1e293b",
+  backgroundColor: "#0a1a30",
+  foregroundColor: "#f1faee",
+  headerBackgroundColor: "#06101f",
+  headerTextColor: "#a8dadc",
+  oddRowBackgroundColor: "#0e2038",
+  rowHoverColor: "#162d4e",
+  borderColor: "#2e4a6e",
+  accentColor: "#457b9d",
+  chromeBackgroundColor: "#06101f",
+  columnBorder: true,
   headerFontWeight: 600,
   headerFontSize: 11,
   headerHeight: 32,
@@ -27,6 +34,18 @@ const darkTheme = themeQuartz.withParams({
   fontSize: 12,
   wrapperBorderRadius: 8,
 });
+
+function loadGridState(tableName: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = localStorage.getItem(`admin:grid:${tableName}`);
+    return v ? JSON.parse(v) : null;
+  } catch { return null; }
+}
+
+function saveGridState(tableName: string, state: Record<string, unknown>) {
+  try { localStorage.setItem(`admin:grid:${tableName}`, JSON.stringify(state)); } catch { /* ignore */ }
+}
 
 type Row = Record<string, unknown>;
 
@@ -88,6 +107,48 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
     await onDelete(selectedId);
   }, [selectedId, tableName, onDelete]);
 
+  // --- Grid state persistence ---
+  const restoringRef = useRef(true);
+
+  const persistState = useCallback(() => {
+    if (restoringRef.current) return;
+    const api = gridRef.current?.api;
+    if (!api) return;
+    const state: Record<string, unknown> = {
+      filterModel: api.getFilterModel(),
+      columnState: api.getColumnState(),
+      paginationPage: api.paginationGetCurrentPage(),
+    };
+    saveGridState(tableName, state);
+  }, [tableName]);
+
+  const onGridReady = useCallback((_e: GridReadyEvent) => {
+    const api = gridRef.current?.api;
+    if (!api) return;
+    const saved = loadGridState(tableName);
+    if (saved) {
+      if (saved.columnState) api.applyColumnState({ state: saved.columnState, applyOrder: true });
+      if (saved.filterModel) api.setFilterModel(saved.filterModel);
+      if (typeof saved.paginationPage === "number") {
+        // paginationGoToPage must wait for data to be rendered
+        setTimeout(() => api.paginationGoToPage(saved.paginationPage), 0);
+      }
+    }
+    // Allow saving after a short delay so restore events don't trigger saves
+    setTimeout(() => { restoringRef.current = false; }, 100);
+  }, [tableName]);
+
+  // Reset restoring flag when table changes
+  useEffect(() => {
+    restoringRef.current = true;
+  }, [tableName]);
+
+  const onFilterChanged = useCallback((_e: FilterChangedEvent) => persistState(), [persistState]);
+  const onSortChanged = useCallback((_e: SortChangedEvent) => persistState(), [persistState]);
+  const onColumnResized = useCallback((e: ColumnResizedEvent) => { if (e.finished) persistState(); }, [persistState]);
+  const onColumnMoved = useCallback((_e: ColumnMovedEvent) => persistState(), [persistState]);
+  const onPaginationChanged = useCallback((_e: PaginationChangedEvent) => persistState(), [persistState]);
+
   const onSelectionChanged = useCallback(() => {
     const selected = gridRef.current?.api.getSelectedRows();
     if (checkboxSelection && onCheckedChange) {
@@ -128,35 +189,35 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
         <button onClick={handleSave} disabled={dirtyCount === 0 || saving}
           style={{
             padding: "3px 10px", borderRadius: 4, border: "none", cursor: dirtyCount > 0 ? "pointer" : "default",
-            background: dirtyCount > 0 ? "#6366f1" : "#334155", color: "#fff", fontSize: 11, fontWeight: 600,
+            background: dirtyCount > 0 ? "#457b9d" : "#2e4a6e", color: "#f1faee", fontSize: 11, fontWeight: 600,
             opacity: dirtyCount > 0 ? 1 : 0.5,
           }}>
           {saving ? "..." : `Save${dirtyCount > 0 ? ` (${dirtyCount})` : ""}`}
         </button>
         <button onClick={handleAdd}
           style={{
-            padding: "3px 10px", borderRadius: 4, border: "1px solid #334155", cursor: "pointer",
-            background: "transparent", color: "#94a3b8", fontSize: 11, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 4, border: "1px solid #2e4a6e", cursor: "pointer",
+            background: "transparent", color: "#a8dadc", fontSize: 11, fontWeight: 600,
           }}>
           + Add
         </button>
         <button onClick={handleDelete} disabled={selectedId == null}
           style={{
-            padding: "3px 10px", borderRadius: 4, border: "1px solid #334155", cursor: selectedId != null ? "pointer" : "default",
-            background: "transparent", color: selectedId != null ? "#f87171" : "#475569", fontSize: 11, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 4, border: "1px solid #2e4a6e", cursor: selectedId != null ? "pointer" : "default",
+            background: "transparent", color: selectedId != null ? "#e63946" : "#457b9d", fontSize: 11, fontWeight: 600,
           }}>
           Del
         </button>
         {dirtyCount > 0 && (
           <button onClick={handleDiscard}
             style={{
-              padding: "3px 10px", borderRadius: 4, border: "1px solid #334155", cursor: "pointer",
+              padding: "3px 10px", borderRadius: 4, border: "1px solid #2e4a6e", cursor: "pointer",
               background: "transparent", color: "#fbbf24", fontSize: 11, fontWeight: 600,
             }}>
             Discard
           </button>
         )}
-        <span style={{ marginLeft: "auto", fontSize: 10, color: "#64748b" }}>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: "#457b9d" }}>
           {rows.length} rows
         </span>
       </div>
@@ -176,6 +237,12 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
           pagination={true}
           paginationPageSize={50}
           paginationPageSizeSelector={[25, 50, 100, 200]}
+          onGridReady={onGridReady}
+          onFilterChanged={onFilterChanged}
+          onSortChanged={onSortChanged}
+          onColumnResized={onColumnResized}
+          onColumnMoved={onColumnMoved}
+          onPaginationChanged={onPaginationChanged}
         />
       </div>
     </div>
