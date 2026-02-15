@@ -52,16 +52,18 @@ export interface DeveloperProfile {
   type_breakdown: TypeBreakdown;
 }
 
-export interface RoadmapProject {
+export interface Project {
   id: number;
   name: string;
-  period: string;
-  impact: string;
-  type: string;
-  leads: string;
-  description: string;
-  challenges: string;
-  result: string;
+  is_roadmap: boolean;
+  period: string | null;
+  impact: string | null;
+  type: string | null;
+  leads: string | null;
+  description: string | null;
+  challenges: string | null;
+  result: string | null;
+  items: string[];
   sort_order: number;
 }
 
@@ -91,6 +93,9 @@ export interface Achievement {
   items: string[];
 }
 
+// Keep RoadmapProject as alias for backward compat
+export type RoadmapProject = Project;
+
 export interface CrossContribution {
   id: number;
   release_desc: string;
@@ -108,17 +113,66 @@ export interface BoardSummary {
   total_tickets: number;
 }
 
+// --- Admin types ---
+
+export interface AdminMeta {
+  developers: { id: number; display_name: string; developer_key: string }[];
+  repositories: { id: number; name: string }[];
+  releases: { id: number; version: string; release_date: string }[];
+  baseBranches: { id: number; name: string }[];
+  projects: { id: number; name: string; is_roadmap: boolean }[];
+}
+
+async function fetchJSONWithBody<T>(path: string, opts: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: { "Content-Type": "application/json", ...opts.headers },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API error: ${res.status} ${res.statusText} ${body}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export const adminApi = {
+  meta: () => fetchJSON<AdminMeta>("/api/admin/meta"),
+  list: (table: string) => fetchJSON<Record<string, unknown>[]>(`/api/admin/${table}`),
+  create: (table: string, data: Record<string, unknown>) =>
+    fetchJSONWithBody<Record<string, unknown>>(`/api/admin/${table}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  batchUpdate: (table: string, rows: Record<string, unknown>[]) =>
+    fetchJSONWithBody<Record<string, unknown>[]>(`/api/admin/batch/${table}`, {
+      method: "PUT",
+      body: JSON.stringify({ rows }),
+    }),
+  update: (table: string, id: number, data: Record<string, unknown>) =>
+    fetchJSONWithBody<Record<string, unknown>>(`/api/admin/${table}/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  remove: (table: string, id: number) =>
+    fetchJSONWithBody<void>(`/api/admin/${table}/${id}`, { method: "DELETE" }),
+};
+
 export const api = {
   teamMonthly: () => fetchJSON<TeamMonthly[]>("/api/board/team-monthly"),
   fixRatio: () => fetchJSON<FixRatio[]>("/api/board/fix-ratio"),
-  supportTickets: () => fetchJSON<SupportTicket[]>("/api/board/support-tickets"),
+  supportTickets: () =>
+    fetchJSON<SupportTicket[]>("/api/board/support-tickets"),
   jiraBreakdown: () => fetchJSON<JiraBreakdown[]>("/api/board/jira-breakdown"),
   developers: () => fetchJSON<Developer[]>("/api/board/developers"),
-  developerProfiles: () => fetchJSON<DeveloperProfile[]>("/api/board/developer-profiles"),
-  bigProjects: () => fetchJSON<RoadmapProject[]>("/api/board/big-projects"),
+  developerProfiles: () =>
+    fetchJSON<DeveloperProfile[]>("/api/board/developer-profiles"),
+  projects: () => fetchJSON<Project[]>("/api/board/projects"),
   incidents: () => fetchJSON<Incident[]>("/api/board/incidents"),
   baseBranches: () => fetchJSON<BaseBranch[]>("/api/board/base-branches"),
   achievements: () => fetchJSON<Achievement[]>("/api/board/achievements"),
-  crossContributions: () => fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
+  crossContributions: () =>
+    fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
   summary: () => fetchJSON<BoardSummary[]>("/api/board/summary"),
 };
+
