@@ -43,6 +43,15 @@ export interface TypeBreakdown {
   total: number;
 }
 
+export interface QualityStats {
+  bugs_introduced: number;
+  rollbacks: number;
+  fix_ratio: number;
+  avg_time_to_fix_days: number | null;
+  fixes_for_others: Record<string, number>;
+  fixed_by_others: Record<string, number>;
+}
+
 export interface DeveloperProfile {
   developer_key: string;
   display_name: string;
@@ -50,6 +59,7 @@ export interface DeveloperProfile {
   repos: string[];
   themes: string[];
   type_breakdown: TypeBreakdown;
+  quality_stats: QualityStats;
 }
 
 export interface ProjectLead {
@@ -126,7 +136,7 @@ export interface BoardSummary {
 export interface AdminMeta {
   developers: { id: number; display_name: string; developer_key: string }[];
   repositories: { id: number; name: string }[];
-  releases: { id: number; version: string; release_date: string }[];
+  releases: { id: number; version: string; release_date: string; changes: string | null; repo_name: string | null }[];
   baseBranches: { id: number; name: string }[];
   projects: { id: number; name: string; is_roadmap: boolean }[];
 }

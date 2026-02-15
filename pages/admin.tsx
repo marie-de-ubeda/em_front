@@ -87,6 +87,7 @@ const TABLE_GROUPS: TableGroup[] = [
       { key: "base_branch_developers", label: "BB-Devs" },
       { key: "release_projects", label: "Release-Projects" },
       { key: "project_developers", label: "Project-Devs" },
+      { key: "release_fixes", label: "Release-Fixes" },
     ],
   },
 ];
@@ -99,6 +100,8 @@ const TABLE_RELATIONS: Record<string, TableRelation[]> = {
     { label: "Pull Requests", table: "pull_requests", foreignKey: "release_id", columns: ["number", "title"] },
     { label: "Tickets", table: "tickets", foreignKey: "release_id", columns: ["key", "url"] },
     { label: "Projects", table: "release_projects", foreignKey: "release_id", columns: ["project_id"] },
+    { label: "Corrige les bugs de", table: "release_fixes", foreignKey: "fix_release_id", columns: ["bugged_release_id"] },
+    { label: "Bugs corrigés par", table: "release_fixes", foreignKey: "bugged_release_id", columns: ["fix_release_id"] },
   ],
   developers: [
     { label: "Releases", table: "releases", foreignKey: "developer_id", columns: ["version", "release_date", "repository_id"] },
@@ -119,6 +122,14 @@ const TABLE_RELATIONS: Record<string, TableRelation[]> = {
     { label: "Developers", table: "base_branch_developers", foreignKey: "base_branch_id", columns: ["developer_id"] },
   ],
 };
+
+function releaseLabel(r: { version: string; release_date: string; changes: string | null; repo_name: string | null }): string {
+  const repo = r.repo_name ? r.repo_name.replace(/^indb-/, "") : "";
+  const date = r.release_date?.slice(0, 10) ?? "";
+  const preview = r.changes ? r.changes.split(/\s+/).slice(0, 10).join(" ") : "";
+  const truncated = preview.length < (r.changes?.length ?? 0) ? `${preview}...` : preview;
+  return [repo, r.version, date ? `(${date})` : "", truncated].filter(Boolean).join(" ");
+}
 
 function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?: Map<number, number[]>): ColDef[] {
   const devDropdown: Partial<ColDef> = meta ? {
@@ -144,7 +155,7 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
     cellEditorParams: { values: meta.releases.map((r) => r.id) },
     valueFormatter: (p) => {
       const rel = meta.releases.find((r) => r.id === Number(p.value));
-      return rel ? `${rel.version} (${rel.release_date?.slice(0, 10) ?? ""})` : String(p.value ?? "");
+      return rel ? releaseLabel(rel) : String(p.value ?? "");
     },
   } : {};
 
@@ -182,6 +193,7 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
             return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color }}>{t}</span>;
           },
         },
+        { field: "is_rollback", headerName: "Rollback", maxWidth: 80, filter: false },
         {
           field: "release_date", headerName: "Date", maxWidth: 90, sort: "desc" as const, filter: false,
           valueFormatter: (p) => formatDateDMY(p.value),
@@ -368,6 +380,12 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
         idCol,
         { field: "project_id", headerName: "Project", minWidth: 200, ...projectDropdown },
         { field: "developer_id", headerName: "Developer", minWidth: 160, ...devDropdown },
+      ];
+    case "release_fixes":
+      return [
+        idCol,
+        { field: "fix_release_id", headerName: "Fix Release", minWidth: 250, ...releaseDropdown },
+        { field: "bugged_release_id", headerName: "Bugged Release", minWidth: 250, ...releaseDropdown },
       ];
     default:
       return [idCol];

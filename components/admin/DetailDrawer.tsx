@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { AdminMeta } from "../../lib/api";
 import { adminApi, api } from "../../lib/api";
 
@@ -27,7 +27,7 @@ const TEXTAREA_FIELDS = new Set([
 ]);
 const JSON_FIELDS = new Set(["themes"]);
 const DATE_FIELDS = new Set(["release_date", "date"]);
-const BOOL_FIELDS = new Set(["is_em"]);
+const BOOL_FIELDS = new Set(["is_em", "is_rollback"]);
 const READONLY_FIELDS = new Set(["id", "created_at", "release_url"]);
 // Key: "table:field" or just "field" for global
 const SELECT_FIELDS: Record<string, string[]> = {
@@ -50,6 +50,28 @@ function fieldType(name: string, table: string): "readonly" | "fk" | "date" | "b
   return "text";
 }
 
+const FK_LABELS: Record<string, string> = {
+  fix_release_id: "release qui corrige",
+  bugged_release_id: "release buggée",
+  release_id: "release",
+  developer_id: "développeur",
+  repository_id: "repository",
+  project_id: "projet",
+  base_branch_id: "base branch",
+};
+
+function fkPlaceholder(col: string): string {
+  return FK_LABELS[col] || col.replace(/_id$/, "").replace(/_/g, " ");
+}
+
+function releaseLabel(r: { version: string; release_date: string; changes: string | null; repo_name: string | null }): string {
+  const repo = r.repo_name ? r.repo_name.replace(/^indb-/, "") : "";
+  const date = r.release_date?.slice(0, 10) ?? "";
+  const preview = r.changes ? r.changes.split(/\s+/).slice(0, 10).join(" ") : "";
+  const truncated = preview.length < (r.changes?.length ?? 0) ? `${preview}...` : preview;
+  return [repo, r.version, date ? `(${date})` : "", truncated].filter(Boolean).join(" ");
+}
+
 function fkOptions(field: string, meta: AdminMeta): { value: number; label: string }[] {
   switch (field) {
     case "developer_id":
@@ -57,7 +79,9 @@ function fkOptions(field: string, meta: AdminMeta): { value: number; label: stri
     case "repository_id":
       return meta.repositories.map((r) => ({ value: r.id, label: r.name }));
     case "release_id":
-      return meta.releases.map((r) => ({ value: r.id, label: `${r.version} (${r.release_date?.slice(0, 10) ?? ""})` }));
+    case "fix_release_id":
+    case "bugged_release_id":
+      return meta.releases.map((r) => ({ value: r.id, label: releaseLabel(r) }));
     case "base_branch_id":
       return meta.baseBranches.map((b) => ({ value: b.id, label: b.name }));
     case "project_id":
@@ -95,13 +119,119 @@ const LABEL_STYLE: React.CSSProperties = {
   fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4, display: "block",
 };
 
+// Unique key per relation (handles multiple relations on the same table)
+function relKey(rel: TableRelation): string {
+  return `${rel.table}:${rel.foreignKey}`;
+}
+
+const SEARCHABLE_THRESHOLD = 20;
+
+function SearchSelect({ options, value, onChange, placeholder, style }: {
+  options: { value: number; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
+  placeholder: string;
+  style?: React.CSSProperties;
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const selectedLabel = options.find((o) => String(o.value) === value)?.label || "";
+  const filtered = search
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  // Use native select for small lists
+  if (options.length < SEARCHABLE_THRESHOLD) {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        style={{ ...INPUT_STYLE, cursor: "pointer", ...style }}>
+        <option value="">— {placeholder} —</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative", ...style }}>
+      <div onClick={() => setOpen(!open)} style={{
+        ...INPUT_STYLE, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
+        overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis",
+      }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", color: selectedLabel ? "#e2e8f0" : "#64748b" }}>
+          {selectedLabel || `— ${placeholder} —`}
+        </span>
+        <span style={{ color: "#64748b", fontSize: 10, marginLeft: 4, flexShrink: 0 }}>▾</span>
+      </div>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
+          background: "#1e293b", border: "1px solid #334155", borderRadius: 6,
+          marginTop: 2, maxHeight: 260, display: "flex", flexDirection: "column",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+        }}>
+          <input
+            type="text" autoFocus placeholder="Rechercher..."
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            style={{ ...INPUT_STYLE, border: "none", borderBottom: "1px solid #334155", borderRadius: "6px 6px 0 0", flexShrink: 0 }}
+          />
+          <div style={{ overflowY: "auto", maxHeight: 220 }}>
+            {value && (
+              <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+                style={{ padding: "6px 10px", fontSize: 11, color: "#64748b", cursor: "pointer", borderBottom: "1px solid #0f172a" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#334155")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                — Aucun —
+              </div>
+            )}
+            {filtered.slice(0, 50).map((o) => (
+              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }}
+                style={{
+                  padding: "6px 10px", fontSize: 11, color: String(o.value) === value ? "#818cf8" : "#e2e8f0",
+                  cursor: "pointer", borderBottom: "1px solid #0f172a",
+                  fontWeight: String(o.value) === value ? 600 : 400,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#334155")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                {o.label}
+              </div>
+            ))}
+            {filtered.length > 50 && (
+              <div style={{ padding: "6px 10px", fontSize: 10, color: "#475569", textAlign: "center" }}>
+                {filtered.length - 50} autres...
+              </div>
+            )}
+            {filtered.length === 0 && (
+              <div style={{ padding: "12px 10px", fontSize: 11, color: "#475569", textAlign: "center" }}>Aucun résultat</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DetailDrawer({ row, table, meta, relations, columns, onClose, onSaved, onCreated }: Props) {
   const isCreate = row.id == null;
   const [edited, setEdited] = useState<Row>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Related entity data per relation
+  // Related entity data per relation (keyed by relKey)
   const [relatedData, setRelatedData] = useState<Record<string, Row[]>>({});
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
@@ -112,13 +242,14 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
     if (isCreate) return;
     // Load related data
     for (const rel of relations) {
+      const rk = relKey(rel);
       adminApi.list(rel.table).then((rows) => {
         const filtered = rows.filter((r) => r[rel.foreignKey] === row.id);
-        setRelatedData((prev) => ({ ...prev, [rel.table]: filtered }));
+        setRelatedData((prev) => ({ ...prev, [rk]: filtered }));
       });
     }
     // Expand all sections by default
-    setExpandedSections(new Set(relations.map((r) => r.table)));
+    setExpandedSections(new Set(relations.map((r) => relKey(r))));
   }, [row.id, table, relations, isCreate]);
 
   const fields = isCreate
@@ -175,10 +306,11 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
       }
     }
     try {
+      const rk = relKey(rel);
       await adminApi.create(rel.table, newRow);
       const rows = await adminApi.list(rel.table);
       const filtered = rows.filter((r) => r[rel.foreignKey] === row.id);
-      setRelatedData((prev) => ({ ...prev, [rel.table]: filtered }));
+      setRelatedData((prev) => ({ ...prev, [rk]: filtered }));
       setAddingRel(null);
       setAddingValues({});
     } catch (e: unknown) {
@@ -188,10 +320,11 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
 
   const handleDeleteChild = useCallback(async (rel: TableRelation, childId: number) => {
     try {
+      const rk = relKey(rel);
       await adminApi.remove(rel.table, childId);
       setRelatedData((prev) => ({
         ...prev,
-        [rel.table]: (prev[rel.table] || []).filter((r) => r.id !== childId),
+        [rk]: (prev[rk] || []).filter((r) => r.id !== childId),
       }));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -278,13 +411,12 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                 <label style={LABEL_STYLE}>{field.replace(/_/g, " ")}</label>
 
                 {type === "fk" && (
-                  <select value={String(val ?? "")} onChange={(e) => setField(field, e.target.value ? Number(e.target.value) : null)}
-                    style={{ ...INPUT_STYLE, cursor: "pointer" }}>
-                    <option value="">—</option>
-                    {fkOptions(field, meta).map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                  <SearchSelect
+                    options={fkOptions(field, meta)}
+                    value={String(val ?? "")}
+                    onChange={(v) => setField(field, v ? Number(v) : null)}
+                    placeholder={fkPlaceholder(field)}
+                  />
                 )}
 
                 {type === "date" && (
@@ -337,12 +469,13 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
 
           {/* Related entity sections (only in edit mode) */}
           {!isCreate && relations.map((rel) => {
-            const children = relatedData[rel.table] || [];
-            const isExpanded = expandedSections.has(rel.table);
+            const rk = relKey(rel);
+            const children = relatedData[rk] || [];
+            const isExpanded = expandedSections.has(rk);
 
             return (
-              <div key={rel.table} style={{ marginTop: 20, borderTop: "1px solid #334155", paddingTop: 12 }}>
-                <button onClick={() => toggleSection(rel.table)} style={{
+              <div key={rk} style={{ marginTop: 20, borderTop: "1px solid #334155", paddingTop: 12 }}>
+                <button onClick={() => toggleSection(rk)} style={{
                   background: "none", border: "none", cursor: "pointer", width: "100%",
                   display: "flex", justifyContent: "space-between", alignItems: "center",
                   padding: "4px 0", color: "#e2e8f0",
@@ -405,17 +538,16 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                       </div>
                       );
                     })}
-                    {addingRel === rel.table ? (
+                    {addingRel === rk ? (
                       <div style={{ marginTop: 6, padding: 8, background: "#0f172a", borderRadius: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         {rel.columns.filter((col) => col !== rel.foreignKey && col.endsWith("_id")).map((col) => (
-                          <select key={col} value={String(addingValues[col] ?? "")}
-                            onChange={(e) => setAddingValues((prev) => ({ ...prev, [col]: e.target.value ? Number(e.target.value) : null }))}
-                            style={{ ...INPUT_STYLE, flex: 1, minWidth: 160 }}>
-                            <option value="">— {col.replace(/_id$/, "").replace(/_/g, " ")} —</option>
-                            {fkOptions(col, meta).map((o) => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
+                          <SearchSelect key={col}
+                            options={fkOptions(col, meta)}
+                            value={String(addingValues[col] ?? "")}
+                            onChange={(v) => setAddingValues((prev) => ({ ...prev, [col]: v ? Number(v) : null }))}
+                            placeholder={fkPlaceholder(col)}
+                            style={{ flex: 1, minWidth: 160 }}
+                          />
                         ))}
                         {rel.columns.filter((col) => col !== rel.foreignKey && !col.endsWith("_id")).map((col) => (
                           <input key={col} type="text" placeholder={col.replace(/_/g, " ")}
@@ -433,7 +565,7 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                         }}>✕</button>
                       </div>
                     ) : (
-                      <button onClick={() => { setAddingRel(rel.table); setAddingValues({}); }} style={{
+                      <button onClick={() => { setAddingRel(rk); setAddingValues({}); }} style={{
                         marginTop: 6, background: "none", border: "1px dashed #334155",
                         color: "#64748b", cursor: "pointer", padding: "6px 12px", borderRadius: 6,
                         fontSize: 11, width: "100%", textAlign: "center",

@@ -114,6 +114,53 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
           </div>
 
           <Card>
+            <SectionTitle icon="📊">Qualité</SectionTitle>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #334155" }}>
+                    {["Dev", "Bugs", "Rollbacks", "Fix %", "Temps fix", "Fixes pour autres"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#94a3b8", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((p) => {
+                    const q = p.quality_stats;
+                    const bugColor = q.bugs_introduced > 2 ? "#f87171" : q.bugs_introduced > 0 ? "#fbbf24" : "#34d399";
+                    const rbColor = q.rollbacks > 2 ? "#f87171" : q.rollbacks > 0 ? "#fbbf24" : "#34d399";
+                    const crossEntries = Object.entries(q.fixes_for_others);
+                    return (
+                      <tr key={p.developer_key} style={{ borderBottom: "1px solid #1a2332", cursor: "pointer" }}
+                        onClick={() => setSel(p.developer_key)}>
+                        <td style={{ padding: "6px 8px", color: p.color, fontWeight: 700 }}>{p.display_name}</td>
+                        <td style={{ padding: "6px 8px", color: bugColor, fontWeight: 600 }}>{q.bugs_introduced}</td>
+                        <td style={{ padding: "6px 8px", color: rbColor, fontWeight: 600 }}>{q.rollbacks}</td>
+                        <td style={{ padding: "6px 8px", color: "#e2e8f0" }}>{q.fix_ratio}%</td>
+                        <td style={{ padding: "6px 8px", color: "#e2e8f0" }}>{q.avg_time_to_fix_days != null ? `${q.avg_time_to_fix_days}j` : "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {crossEntries.length === 0 ? <span style={{ color: "#475569" }}>—</span> : (
+                            <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
+                              {crossEntries.map(([key, cnt]) => {
+                                const devP = profiles.find((x) => x.developer_key === key);
+                                return (
+                                  <span key={key} style={{ fontSize: 10, fontWeight: 600, color: devP?.color || "#94a3b8", background: `${devP?.color || "#94a3b8"}15`, padding: "1px 6px", borderRadius: 6 }}>
+                                    {key} x{cnt}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card>
             <SectionTitle icon="📐">Légende</SectionTitle>
             <div style={{ fontSize: 12, color: "#cbd5e1", lineHeight: 1.8 }}>
               <strong style={{ color: "#f8fafc" }}>Volume</strong> — Total releases / max.{" "}
@@ -163,6 +210,43 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
                 <Chip c="#fb923c">{pBB.length} base branch{pBB.length > 1 ? "es" : ""}</Chip>
               </div>
             </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+              {[
+                { icon: "🐛", label: "Bugs", value: p.quality_stats.bugs_introduced, color: p.quality_stats.bugs_introduced > 0 ? "#f87171" : "#34d399" },
+                { icon: "↩️", label: "Rollbacks", value: p.quality_stats.rollbacks, color: p.quality_stats.rollbacks > 0 ? "#fbbf24" : "#34d399" },
+                { icon: "🔧", label: "Fix %", value: `${p.quality_stats.fix_ratio}%`, color: "#818cf8" },
+                { icon: "⏱️", label: "Temps fix", value: p.quality_stats.avg_time_to_fix_days != null ? `${p.quality_stats.avg_time_to_fix_days}j` : "—", color: "#94a3b8" },
+              ].map((kpi) => (
+                <div key={kpi.label} style={{ background: "#0f172a", borderRadius: 8, padding: "8px 14px", flex: "1 1 100px", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>{kpi.icon} {kpi.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {(Object.keys(p.quality_stats.fixes_for_others).length > 0 || Object.keys(p.quality_stats.fixed_by_others).length > 0) && (
+              <div style={{ background: "#0f172a", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                {Object.keys(p.quality_stats.fixes_for_others).length > 0 && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: Object.keys(p.quality_stats.fixed_by_others).length > 0 ? 6 : 0 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>🔧 Fixes pour les autres :</span>
+                    {Object.entries(p.quality_stats.fixes_for_others).map(([key, cnt]) => {
+                      const devP = profiles.find((x) => x.developer_key === key);
+                      return <Chip key={key} c={devP?.color || "#94a3b8"}>{key} x{cnt}</Chip>;
+                    })}
+                  </div>
+                )}
+                {Object.keys(p.quality_stats.fixed_by_others).length > 0 && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>🩹 Corrigé par :</span>
+                    {Object.entries(p.quality_stats.fixed_by_others).map(([key, cnt]) => {
+                      const devP = profiles.find((x) => x.developer_key === key);
+                      return <Chip key={key} c={devP?.color || "#94a3b8"}>{key} x{cnt}</Chip>;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ marginBottom: 12 }}>
               <h4 style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>📈 Activité mensuelle</h4>
