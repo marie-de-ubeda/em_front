@@ -12,6 +12,7 @@ import {
   type ColumnResizedEvent,
   type ColumnMovedEvent,
   type PaginationChangedEvent,
+  type CellClickedEvent,
 } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -166,20 +167,7 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
     flex: 1,
   }), []);
 
-  const finalColumnDefs = useMemo(() => {
-    if (!checkboxSelection) return columnDefs;
-    const checkCol: ColDef = {
-      headerCheckboxSelection: true,
-      checkboxSelection: true,
-      maxWidth: 40,
-      editable: false,
-      sortable: false,
-      filter: false,
-      resizable: false,
-      flex: 0,
-    };
-    return [checkCol, ...columnDefs];
-  }, [columnDefs, checkboxSelection]);
+  const finalColumnDefs = useMemo(() => columnDefs, [columnDefs]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -229,10 +217,16 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
           columnDefs={finalColumnDefs}
           defaultColDef={defaultColDef}
           onCellValueChanged={onCellValueChanged}
-          rowSelection={checkboxSelection ? "multiple" : "single"}
+          rowSelection={checkboxSelection ? { mode: "multiRow", checkboxes: true, headerCheckbox: true, enableClickSelection: false } as never : "single"}
           onSelectionChanged={onSelectionChanged}
           getRowId={(params) => String(params.data.id)}
-          onRowClicked={(e) => onRowClicked?.(e.data)}
+          onCellClicked={(e: CellClickedEvent) => {
+            if (e.colDef?.field === "_projects") {
+              e.api.startEditingCell({ rowIndex: e.rowIndex!, colKey: e.column! });
+              return;
+            }
+            onRowClicked?.(e.data);
+          }}
           tooltipShowDelay={300}
           pagination={true}
           paginationPageSize={50}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, forwardRef, useImperativeHandle } from "react";
 import dynamic from "next/dynamic";
 import type { ColDef } from "ag-grid-community";
 import type { AdminMeta } from "../lib/api";
@@ -131,7 +131,61 @@ function releaseLabel(r: { version: string; release_date: string; changes: strin
   return [repo, r.version, date ? `(${date})` : "", truncated].filter(Boolean).join(" ");
 }
 
-function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?: Map<number, number[]>): ColDef[] {
+const ProjectCellEditor = forwardRef(function ProjectCellEditor(
+  props: { value: string; data: Row; meta: AdminMeta; releaseProjectMap: Map<number, number[]>; onToggleProject: (releaseId: number, projectId: number, add: boolean) => void; api: { stopEditing: () => void } },
+  ref: React.Ref<{ getValue: () => string }>
+) {
+  const releaseId = props.data?.id as number;
+  const pids = props.releaseProjectMap.get(releaseId) || [];
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    getValue: () => props.value,
+  }));
+
+  useEffect(() => {
+    containerRef.current?.focus();
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        props.api.stopEditing();
+      }
+    };
+    // Delay to avoid the opening click from immediately closing
+    const timer = setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    return () => { clearTimeout(timer); document.removeEventListener("mousedown", handler); };
+  }, [props.api]);
+
+  return (
+    <div ref={containerRef} tabIndex={0} style={{
+      background: "#0a1a30", border: "1px solid #2e4a6e", borderRadius: 6,
+      padding: "4px 0", minWidth: 200, maxHeight: 260, overflowY: "auto",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+    }}>
+      {props.meta.projects.map((proj) => {
+        const checked = pids.includes(proj.id);
+        const color = hashColor(proj.name);
+        return (
+          <label key={proj.id} style={{
+            display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+            fontSize: 11, color: "#f1faee", cursor: "pointer",
+          }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#0f2440")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            <input type="checkbox" checked={checked}
+              onChange={() => props.onToggleProject(releaseId, proj.id, !checked)}
+              style={{ accentColor: "#457b9d" }} />
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />
+              {proj.name}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+});
+
+function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?: Map<number, number[]>, onToggleProject?: (releaseId: number, projectId: number, add: boolean) => void): ColDef[] {
   const devDropdown: Partial<ColDef> = meta ? {
     cellEditor: "agSelectCellEditor",
     cellEditorParams: { values: meta.developers.map((d) => d.id) },
@@ -224,16 +278,23 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
           cellEditor: "agLargeTextCellEditor", cellEditorPopup: true,
         },
         {
-          field: "_projects", headerName: "Projects", minWidth: 100, maxWidth: 200, editable: false, sortable: false, filter: false,
+          field: "_projects", headerName: "Projects", minWidth: 100, maxWidth: 200,
+          editable: !!onToggleProject, sortable: false, filter: false,
+          cellEditorPopup: true,
+          cellEditor: meta && releaseProjectMap && onToggleProject
+            ? ProjectCellEditor
+            : undefined,
+          cellEditorParams: meta && releaseProjectMap && onToggleProject
+            ? { meta, releaseProjectMap, onToggleProject }
+            : undefined,
           valueGetter: (p) => {
             if (!meta || !releaseProjectMap) return "";
             const pids = releaseProjectMap.get(p.data?.id as number) || [];
             return pids.map((pid) => meta.projects.find((pr) => pr.id === pid)?.name ?? "").filter(Boolean).join(", ");
           },
-          cellRenderer: (p: { data: Row }) => {
-            if (!meta || !releaseProjectMap) return null;
+          cellRenderer: meta && releaseProjectMap ? (p: { data: Row }) => {
             const pids = releaseProjectMap.get(p.data?.id as number) || [];
-            if (pids.length === 0) return <span style={{ color: "#475569", fontSize: 9 }}>—</span>;
+            if (pids.length === 0) return <span style={{ color: "#457b9d", fontSize: 9 }}>+ projet</span>;
             return (
               <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", alignItems: "center" }}>
                 {pids.map((pid) => {
@@ -252,7 +313,7 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
                 })}
               </span>
             );
-          },
+          } : undefined,
         },
       ];
     case "pull_requests":
@@ -502,7 +563,23 @@ export default function AdminPage() {
     }
   }, [bulkProjectId, checkedReleaseIds, releaseProjectMap, loadReleaseProjects]);
 
-  const columnDefs = getColumnDefs(table, meta, releaseProjectMap);
+  const handleToggleProject = useCallback(async (releaseId: number, projectId: number, add: boolean) => {
+    try {
+      if (add) {
+        await adminApi.create("release_projects", { release_id: releaseId, project_id: projectId });
+      } else {
+        // Find the junction row to delete
+        const rps = await adminApi.list("release_projects");
+        const match = rps.find((rp) => rp.release_id === releaseId && rp.project_id === projectId);
+        if (match) await adminApi.remove("release_projects", match.id as number);
+      }
+      await loadReleaseProjects();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [loadReleaseProjects]);
+
+  const columnDefs = useMemo(() => getColumnDefs(table, meta, releaseProjectMap, handleToggleProject), [table, meta, releaseProjectMap, handleToggleProject]);
   const drawerColumns = useMemo(() => columnDefs.map((c) => c.field).filter((f): f is string => !!f), [columnDefs]);
   const currentLabel = TABLE_GROUPS.flatMap((g) => g.tables).find((t) => t.key === table)?.label ?? table;
 
