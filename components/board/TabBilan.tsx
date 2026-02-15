@@ -52,27 +52,16 @@ export default function TabBilan({ teamMonthly, projects, jiraBreakdown, totalRe
         </div>
         {showAch && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {projects.filter((p) => {
-              const items = Array.isArray(p.items) ? p.items : [];
-              return items.length > 0;
-            }).map((p, i) => {
-              const items = Array.isArray(p.items) ? p.items : [];
-              return (
-                <div key={i} style={{ flex: "1 1 220px", background: "#0f172a", borderRadius: 8, padding: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#f472b6", marginBottom: 6 }}>{p.name}</div>
-                  {items.map((item: string, j: number) => (
-                    <div key={j} style={{
-                      fontSize: 11,
-                      color: item.includes("Marie") ? "#f472b6" : item.startsWith("⏳") ? "#fbbf24" : "#cbd5e1",
-                      padding: "2px 0",
-                      fontWeight: item.includes("Marie") ? 600 : 400,
-                    }}>
-                      {item.includes("Marie") ? "★ " : item.startsWith("⏳") ? "" : "• "}{item}
-                    </div>
-                  ))}
+            {projects.filter((p) => p.ai_summary).map((p, i) => (
+              <div key={i} style={{ flex: "1 1 220px", background: "#0f172a", borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#f472b6", marginBottom: 6 }}>
+                  {p.name}{p.releases?.length ? ` (${p.releases.length})` : ""}
                 </div>
-              );
-            })}
+                <div style={{ fontSize: 11, color: "#cbd5e1", lineHeight: 1.6, whiteSpace: "pre-line" }}>
+                  {p.ai_summary}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Card>

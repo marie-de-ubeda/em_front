@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AdminMeta } from "../../lib/api";
-import { adminApi } from "../../lib/api";
+import { adminApi, api } from "../../lib/api";
 
 type Row = Record<string, unknown>;
 
@@ -23,24 +23,30 @@ interface Props {
 }
 
 const TEXTAREA_FIELDS = new Set([
-  "description", "changes", "detail", "lesson", "challenges", "result",
+  "description", "changes", "detail", "lesson", "challenges", "result", "ai_summary",
 ]);
-const JSON_FIELDS = new Set(["themes", "items"]);
+const JSON_FIELDS = new Set(["themes"]);
 const DATE_FIELDS = new Set(["release_date", "date"]);
 const BOOL_FIELDS = new Set(["is_em"]);
 const READONLY_FIELDS = new Set(["id", "created_at", "release_url"]);
+// Key: "table:field" or just "field" for global
 const SELECT_FIELDS: Record<string, string[]> = {
   release_type: ["feat", "fix", "refacto", "chore"],
+  "projects:type": ["Produit", "Tech", "Dette technique"],
 };
 
-function fieldType(name: string): "readonly" | "fk" | "date" | "bool" | "json" | "textarea" | "select" | "text" {
+function getSelectOptions(field: string, table: string): string[] | null {
+  return SELECT_FIELDS[`${table}:${field}`] || SELECT_FIELDS[field] || null;
+}
+
+function fieldType(name: string, table: string): "readonly" | "fk" | "date" | "bool" | "json" | "textarea" | "select" | "text" {
   if (READONLY_FIELDS.has(name)) return "readonly";
   if (name.endsWith("_id")) return "fk";
   if (DATE_FIELDS.has(name)) return "date";
   if (BOOL_FIELDS.has(name)) return "bool";
   if (JSON_FIELDS.has(name)) return "json";
   if (TEXTAREA_FIELDS.has(name)) return "textarea";
-  if (name in SELECT_FIELDS) return "select";
+  if (getSelectOptions(name, table)) return "select";
   return "text";
 }
 
@@ -192,6 +198,23 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
     }
   }, []);
 
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerateSummary = useCallback(async () => {
+    if (!row.id) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await api.generateSummary(row.id as number);
+      // Update the local row display
+      setEdited((prev) => ({ ...prev, ai_summary: result.ai_summary }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(false);
+    }
+  }, [row.id]);
+
   const dirtyCount = Object.keys(edited).length;
 
   return (
@@ -247,7 +270,7 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
 
           {/* Editable fields */}
           {fields.filter((f) => !READONLY_FIELDS.has(f)).map((field) => {
-            const type = fieldType(field);
+            const type = fieldType(field, table);
             const val = currentValue(field);
 
             return (
@@ -283,7 +306,7 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                   <select value={String(val ?? "")} onChange={(e) => setField(field, e.target.value)}
                     style={{ ...INPUT_STYLE, cursor: "pointer" }}>
                     <option value="">—</option>
-                    {SELECT_FIELDS[field]?.map((o) => (
+                    {getSelectOptions(field, table)?.map((o) => (
                       <option key={o} value={o}>{o}</option>
                     ))}
                   </select>
@@ -435,6 +458,16 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
         }}>
           {error && <div style={{ flex: 1, fontSize: 11, color: "#f87171", overflow: "hidden", textOverflow: "ellipsis" }}>{error}</div>}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {table === "projects" && !isCreate && (
+              <button onClick={handleGenerateSummary} disabled={generating}
+                style={{
+                  padding: "8px 14px", borderRadius: 6, border: "1px solid #a78bfa",
+                  background: "transparent", color: "#a78bfa", cursor: generating ? "wait" : "pointer",
+                  fontSize: 11, fontWeight: 600, opacity: generating ? 0.6 : 1,
+                }}>
+                {generating ? "Generating..." : "AI Summary"}
+              </button>
+            )}
             <button onClick={onClose} style={{
               padding: "8px 16px", borderRadius: 6, border: "1px solid #334155",
               background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: 12, fontWeight: 600,

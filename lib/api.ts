@@ -52,6 +52,19 @@ export interface DeveloperProfile {
   type_breakdown: TypeBreakdown;
 }
 
+export interface ProjectLead {
+  developer_key: string;
+  display_name: string;
+}
+
+export interface ProjectRelease {
+  release_id: number;
+  version: string;
+  release_date: string | null;
+  changes: string | null;
+  repo_name: string;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -59,12 +72,13 @@ export interface Project {
   period: string | null;
   impact: string | null;
   type: string | null;
-  leads: string | null;
   description: string | null;
   challenges: string | null;
   result: string | null;
-  items: string[];
+  ai_summary: string | null;
   sort_order: number;
+  leads: ProjectLead[];
+  releases: ProjectRelease[];
 }
 
 export interface Incident {
@@ -85,12 +99,6 @@ export interface BaseBranch {
   developer_key: string;
   pr_reference: string;
   repositories: string;
-}
-
-export interface Achievement {
-  id: number;
-  category: string;
-  items: string[];
 }
 
 // Keep RoadmapProject as alias for backward compat
@@ -170,7 +178,10 @@ export const api = {
   projects: () => fetchJSON<Project[]>("/api/board/projects"),
   incidents: () => fetchJSON<Incident[]>("/api/board/incidents"),
   baseBranches: () => fetchJSON<BaseBranch[]>("/api/board/base-branches"),
-  achievements: () => fetchJSON<Achievement[]>("/api/board/achievements"),
+  generateSummary: (projectId: number) =>
+    fetchJSONWithBody<{ ai_summary: string }>(`/api/board/projects/${projectId}/generate-summary`, {
+      method: "POST",
+    }),
   crossContributions: () =>
     fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
   summary: () => fetchJSON<BoardSummary[]>("/api/board/summary"),

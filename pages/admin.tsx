@@ -86,6 +86,7 @@ const TABLE_GROUPS: TableGroup[] = [
       { key: "developer_repositories", label: "Dev-Repos" },
       { key: "base_branch_developers", label: "BB-Devs" },
       { key: "release_projects", label: "Release-Projects" },
+      { key: "project_developers", label: "Project-Devs" },
     ],
   },
 ];
@@ -111,6 +112,7 @@ const TABLE_RELATIONS: Record<string, TableRelation[]> = {
   ],
   projects: [
     { label: "Releases", table: "release_projects", foreignKey: "project_id", columns: ["release_id"] },
+    { label: "Developers", table: "project_developers", foreignKey: "project_id", columns: ["developer_id"] },
   ],
   incidents: [],
   base_branches: [
@@ -298,22 +300,15 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: IMPACT_OPTIONS },
         },
-        { field: "type", minWidth: 100 },
-        { field: "leads", minWidth: 100 },
+        {
+          field: "type", minWidth: 120,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["Produit", "Tech", "Dette technique"] },
+        },
         { field: "description", minWidth: 200, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
         { field: "challenges", minWidth: 200, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
         { field: "result", minWidth: 200, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
-        {
-          field: "items", minWidth: 200,
-          valueFormatter: (p) => {
-            const v = p.value;
-            if (Array.isArray(v)) return v.join(" | ");
-            if (typeof v === "string") { try { return JSON.parse(v).join(" | "); } catch { return v; } }
-            return String(v ?? "");
-          },
-          cellEditor: "agLargeTextCellEditor", cellEditorPopup: true,
-          valueParser: (p) => { try { return JSON.parse(p.newValue); } catch { return p.newValue; } },
-        },
+        { field: "ai_summary", headerName: "Résumé IA", minWidth: 250, editable: false, cellEditor: "agLargeTextCellEditor", cellEditorPopup: true },
         { field: "sort_order", maxWidth: 80 },
       ];
     case "incidents":
@@ -367,6 +362,12 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
         idCol,
         { field: "release_id", headerName: "Release", minWidth: 200, ...releaseDropdown },
         { field: "project_id", headerName: "Project", minWidth: 200, ...projectDropdown },
+      ];
+    case "project_developers":
+      return [
+        idCol,
+        { field: "project_id", headerName: "Project", minWidth: 200, ...projectDropdown },
+        { field: "developer_id", headerName: "Developer", minWidth: 160, ...devDropdown },
       ];
     default:
       return [idCol];
