@@ -29,14 +29,18 @@ const JSON_FIELDS = new Set(["themes", "items"]);
 const DATE_FIELDS = new Set(["release_date", "date"]);
 const BOOL_FIELDS = new Set(["is_em"]);
 const READONLY_FIELDS = new Set(["id", "created_at", "release_url"]);
+const SELECT_FIELDS: Record<string, string[]> = {
+  release_type: ["feat", "fix", "refacto", "chore"],
+};
 
-function fieldType(name: string): "readonly" | "fk" | "date" | "bool" | "json" | "textarea" | "text" {
+function fieldType(name: string): "readonly" | "fk" | "date" | "bool" | "json" | "textarea" | "select" | "text" {
   if (READONLY_FIELDS.has(name)) return "readonly";
   if (name.endsWith("_id")) return "fk";
   if (DATE_FIELDS.has(name)) return "date";
   if (BOOL_FIELDS.has(name)) return "bool";
   if (JSON_FIELDS.has(name)) return "json";
   if (TEXTAREA_FIELDS.has(name)) return "textarea";
+  if (name in SELECT_FIELDS) return "select";
   return "text";
 }
 
@@ -275,6 +279,16 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                   </label>
                 )}
 
+                {type === "select" && (
+                  <select value={String(val ?? "")} onChange={(e) => setField(field, e.target.value)}
+                    style={{ ...INPUT_STYLE, cursor: "pointer" }}>
+                    <option value="">—</option>
+                    {SELECT_FIELDS[field]?.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
+                  </select>
+                )}
+
                 {type === "json" && (
                   <textarea value={formatJson(val)}
                     onChange={(e) => {
@@ -326,7 +340,19 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                     {children.length === 0 && (
                       <div style={{ fontSize: 11, color: "#475569", padding: "8px 0" }}>No items</div>
                     )}
-                    {children.map((child) => (
+                    {children.map((child) => {
+                      // Build link for PRs and tickets
+                      let link: string | null = null;
+                      if (rel.table === "pull_requests" && child.number) {
+                        // Derive repo GitHub URL from release_url: https://github.com/org/repo/releases/tag/...
+                        const releaseUrl = String(row.release_url ?? "");
+                        const repoUrl = releaseUrl.replace(/\/releases\/tag\/.*$/, "");
+                        if (repoUrl.includes("github.com")) link = `${repoUrl}/pull/${child.number}`;
+                      } else if (rel.table === "tickets" && child.url) {
+                        link = String(child.url);
+                      }
+
+                      return (
                       <div key={child.id as number} style={{
                         display: "flex", alignItems: "center", gap: 8, padding: "6px 0",
                         borderBottom: "1px solid #1e293b", fontSize: 12,
@@ -337,6 +363,13 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                             {col.endsWith("_id") ? fkLabel(col, child[col], meta) : String(child[col] ?? "")}
                           </span>
                         ))}
+                        {link && (
+                          <a href={link} target="_blank" rel="noopener noreferrer"
+                            style={{ color: "#6366f1", fontSize: 11, flexShrink: 0, textDecoration: "none" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                            onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                          >&#8599;</a>
+                        )}
                         <button onClick={() => handleDeleteChild(rel, child.id as number)} style={{
                           background: "none", border: "none", cursor: "pointer", color: "#475569",
                           fontSize: 14, padding: "2px 6px", borderRadius: 4, flexShrink: 0,
@@ -347,7 +380,8 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
                           ✕
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                     {addingRel === rel.table ? (
                       <div style={{ marginTop: 6, padding: 8, background: "#0f172a", borderRadius: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                         {rel.columns.filter((col) => col !== rel.foreignKey && col.endsWith("_id")).map((col) => (

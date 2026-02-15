@@ -16,6 +16,9 @@ const DEV_COLORS: Record<string, string> = {
   PLM: "#fbbf24", PED: "#60a5fa", MdU: "#f87171",
 };
 
+const TYPE_COLORS: Record<string, string> = { feat: "#818cf8", fix: "#fbbf24", refacto: "#fb923c", chore: "#94a3b8" };
+const TYPE_OPTIONS = ["feat", "fix", "refacto", "chore"];
+
 // Stable color for repository names via simple hash
 const REPO_PALETTE = ["#818cf8", "#34d399", "#fbbf24", "#f472b6", "#60a5fa", "#fb923c", "#f87171", "#94a3b8", "#a78bfa", "#38bdf8"];
 function hashColor(name: string): string {
@@ -40,11 +43,12 @@ interface ReleaseFilters {
   month: string;
   developerId: string;
   repositoryId: string;
+  releaseType: string;
   projectId: string;
   search: string;
 }
 
-const DEFAULT_RELEASE_FILTERS: ReleaseFilters = { year: "all", month: "all", developerId: "all", repositoryId: "all", projectId: "all", search: "" };
+const DEFAULT_RELEASE_FILTERS: ReleaseFilters = { year: "all", month: "all", developerId: "all", repositoryId: "all", releaseType: "all", projectId: "all", search: "" };
 
 interface TableGroup {
   label: string;
@@ -167,6 +171,16 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
       return [
         { field: "version", maxWidth: 100, flex: 0 },
         {
+          field: "release_type", headerName: "Type", maxWidth: 70, filter: false,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: TYPE_OPTIONS },
+          cellRenderer: (p: { value: unknown }) => {
+            const t = String(p.value ?? "");
+            const color = TYPE_COLORS[t] || "#94a3b8";
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color }}>{t}</span>;
+          },
+        },
+        {
           field: "release_date", headerName: "Date", maxWidth: 90, sort: "desc" as const, filter: false,
           valueFormatter: (p) => formatDateDMY(p.value),
         },
@@ -261,11 +275,11 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
           valueParser: (p) => { try { return JSON.parse(p.newValue); } catch { return p.newValue; } },
         },
         { field: "is_em", maxWidth: 70 },
-        { field: "type_feat", headerName: "Feat", maxWidth: 70 },
-        { field: "type_fix", headerName: "Fix", maxWidth: 70 },
-        { field: "type_refacto", headerName: "Refacto", maxWidth: 80 },
-        { field: "type_chore", headerName: "Chore", maxWidth: 80 },
-        { field: "type_total", headerName: "Total", maxWidth: 70 },
+        { field: "type_feat", headerName: "Feat", maxWidth: 70, editable: false },
+        { field: "type_fix", headerName: "Fix", maxWidth: 70, editable: false },
+        { field: "type_refacto", headerName: "Refacto", maxWidth: 80, editable: false },
+        { field: "type_chore", headerName: "Chore", maxWidth: 80, editable: false },
+        { field: "type_total", headerName: "Total", maxWidth: 70, editable: false },
       ];
     case "repositories":
       return [
@@ -472,6 +486,7 @@ export default function AdminPage() {
       }
       if (releaseFilters.developerId !== "all" && String(r.developer_id) !== releaseFilters.developerId) return false;
       if (releaseFilters.repositoryId !== "all" && String(r.repository_id) !== releaseFilters.repositoryId) return false;
+      if (releaseFilters.releaseType !== "all" && String(r.release_type) !== releaseFilters.releaseType) return false;
       if (releaseFilters.search) {
         const q = releaseFilters.search.toLowerCase();
         const haystack = `${r.version ?? ""} ${r.changes ?? ""}`.toLowerCase();
@@ -568,6 +583,11 @@ export default function AdminPage() {
               <option value="all">Repo</option>
               {meta?.repositories.map((r) => <option key={r.id} value={String(r.id)}>{r.name.replace(/^indb-/, "")}</option>)}
             </select>
+            <select value={releaseFilters.releaseType} onChange={(e) => setReleaseFilters((f) => ({ ...f, releaseType: e.target.value }))}
+              style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
+              <option value="all">Type</option>
+              {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
             <select value={releaseFilters.projectId} onChange={(e) => setReleaseFilters((f) => ({ ...f, projectId: e.target.value }))}
               style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, cursor: "pointer" }}>
               <option value="all">Projet</option>
@@ -577,7 +597,7 @@ export default function AdminPage() {
             <input type="text" placeholder="Rechercher..."
               value={releaseFilters.search} onChange={(e) => setReleaseFilters((f) => ({ ...f, search: e.target.value }))}
               style={{ padding: "3px 6px", borderRadius: 4, border: "1px solid #334155", background: "#1e293b", color: "#e2e8f0", fontSize: 11, minWidth: 140, flex: 1, outline: "none" }} />
-            {(releaseFilters.year !== "all" || releaseFilters.month !== "all" || releaseFilters.developerId !== "all" || releaseFilters.repositoryId !== "all" || releaseFilters.projectId !== "all" || releaseFilters.search) && (
+            {(releaseFilters.year !== "all" || releaseFilters.month !== "all" || releaseFilters.developerId !== "all" || releaseFilters.repositoryId !== "all" || releaseFilters.releaseType !== "all" || releaseFilters.projectId !== "all" || releaseFilters.search) && (
               <button onClick={() => setReleaseFilters(DEFAULT_RELEASE_FILTERS)}
                 style={{ padding: "3px 8px", borderRadius: 4, border: "1px solid #334155", background: "transparent", color: "#64748b", fontSize: 10, cursor: "pointer" }}>
                 Reset
