@@ -4,8 +4,8 @@ import dynamic from "next/dynamic";
 import Chip from "../components/board/Chip";
 import type {
   TeamMonthly, FixRatio, SupportTicket, JiraBreakdown,
-  DeveloperProfile, RoadmapProject, Incident, BaseBranch,
-  Achievement, CrossContribution, BoardSummary,
+  DeveloperProfile, Project, Incident, BaseBranch,
+  CrossContribution, BoardSummary,
 } from "../lib/api";
 
 // Dynamic imports to avoid SSR issues with recharts
@@ -23,10 +23,9 @@ interface BoardData {
   supportTickets: SupportTicket[];
   jiraBreakdown: JiraBreakdown[];
   profiles: DeveloperProfile[];
-  projects: RoadmapProject[];
+  projects: Project[];
   incidents: Incident[];
   baseBranches: BaseBranch[];
-  achievements: Achievement[];
   crossContributions: CrossContribution[];
   summary: BoardSummary;
 }
@@ -39,28 +38,27 @@ export const getServerSideProps: GetServerSideProps<BoardData> = async () => {
     return res.json() as Promise<T>;
   };
 
-  const [teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, achievements, crossContributions, summary] = await Promise.all([
+  const [teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, crossContributions, summary] = await Promise.all([
     fetchJSON<TeamMonthly[]>("/api/board/team-monthly"),
     fetchJSON<FixRatio[]>("/api/board/fix-ratio"),
     fetchJSON<SupportTicket[]>("/api/board/support-tickets"),
     fetchJSON<JiraBreakdown[]>("/api/board/jira-breakdown"),
     fetchJSON<DeveloperProfile[]>("/api/board/developer-profiles"),
-    fetchJSON<RoadmapProject[]>("/api/board/big-projects"),
+    fetchJSON<Project[]>("/api/board/projects"),
     fetchJSON<Incident[]>("/api/board/incidents"),
     fetchJSON<BaseBranch[]>("/api/board/base-branches"),
-    fetchJSON<Achievement[]>("/api/board/achievements"),
     fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
     fetchJSON<BoardSummary>("/api/board/summary"),
   ]);
 
   return {
-    props: { teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, achievements, crossContributions, summary },
+    props: { teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, crossContributions, summary },
   };
 };
 
 export default function BoardPage(props: BoardData) {
   const [tab, setTab] = useState(0);
-  const { teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, achievements, crossContributions, summary } = props;
+  const { teamMonthly, fixRatio, supportTickets, jiraBreakdown, profiles, projects, incidents, baseBranches, crossContributions, summary } = props;
 
   return (
     <div style={{ fontFamily: "system-ui,sans-serif", background: "#0f172a", color: "#e2e8f0", minHeight: "100vh", padding: 16 }}>
@@ -110,7 +108,7 @@ export default function BoardPage(props: BoardData) {
         {tab === 2 && (
           <TabBilan
             teamMonthly={teamMonthly}
-            achievements={achievements}
+            projects={projects}
             jiraBreakdown={jiraBreakdown}
             totalReleases={summary.total_releases}
             totalDevelopers={summary.total_developers}
