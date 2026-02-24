@@ -60,6 +60,7 @@ export interface DeveloperProfile {
   developer_key: string;
   display_name: string;
   color: string;
+  is_em: boolean;
   repos: string[];
   themes: string[];
   type_breakdown: TypeBreakdown;
@@ -206,6 +207,7 @@ export interface BugFixDetail {
   fix_changes: string | null;
   bugged_tickets: { key: string; url: string }[];
   fix_tickets: { key: string; url: string }[];
+  project_ids: number[];
 }
 
 export interface QuarterlyEntry {
@@ -250,6 +252,7 @@ export interface ProjectQualityContributor {
   display_name: string;
   color: string;
   release_count: number;
+  bug_count: number;
 }
 
 export interface ProjectQuality {
@@ -258,6 +261,7 @@ export interface ProjectQuality {
   type: string | null;
   impact: string | null;
   is_roadmap: boolean;
+  first_release_date: string | null;
   total_releases: number;
   total_bugs: number;
   bug_rate: number;
@@ -315,6 +319,7 @@ export interface GanttEntry {
   project_id: number;
   project_name: string;
   is_roadmap: boolean;
+  first_release_date: string | null;
   project_color: string;
   sprint_id: number | null;
   sprint_number: number | null;
@@ -337,6 +342,7 @@ export interface GanttRelease {
   sprint_number: number | null;
   tickets: { key: string; url: string }[];
   pull_requests: { number: number; title: string }[];
+  project_ids: number[];
 }
 
 // --- Sprint-Project Matrix types ---

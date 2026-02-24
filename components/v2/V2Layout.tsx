@@ -5,6 +5,7 @@ import BoardFilterBar from "./BoardFilterBar";
 
 const TABS = [
   { label: "Vue d'ensemble", href: "/board/overview" },
+  { label: "Développeurs", href: "/board/developers" },
   { label: "Projets & Gantt", href: "/board/projets" },
   { label: "Qualité & Bugs", href: "/board/qualite" },
 ];
@@ -18,9 +19,10 @@ export default function V2Layout({ children }: Props) {
   const { filterLabel } = useBoardFilter();
 
   return (
-    <div style={{ fontFamily: "system-ui,sans-serif", background: "#0f172a", color: "#e2e8f0", minHeight: "100vh", padding: "16px 24px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#f472b6", margin: 0 }}>EM Dashboard</h1>
+    <div style={{ fontFamily: "system-ui,sans-serif", background: "#000f25", color: "#e2e8f0", minHeight: "100vh", padding: "16px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+        <img src="/logo_ie_mobile.svg" alt="logo" width={24} height={24} />
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "#ffffff", margin: 0 }}>EM Dashboard</h1>
       </div>
       <p style={{ color: "#64748b", fontSize: 12, marginBottom: 16 }}>
         {filterLabel} · Données factuelles issues des release notes
@@ -28,7 +30,8 @@ export default function V2Layout({ children }: Props) {
 
       <div style={{ display: "flex", gap: 4, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
         {TABS.map((t) => {
-          const active = router.pathname === t.href;
+          const active = router.pathname === t.href ||
+            (t.href === "/board/developers" && router.pathname.startsWith("/board/developer/"));
           return (
             <Link key={t.href} href={t.href} style={{
               padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600,

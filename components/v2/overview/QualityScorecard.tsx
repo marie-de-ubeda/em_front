@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useRouter } from "next/router";
 import type { ColDef } from "ag-grid-community";
 import type { DeveloperProfile, ProjectQuality } from "../../../lib/api";
 import BoardGrid from "../BoardGrid";
@@ -13,6 +14,7 @@ const SEV_COLORS: Record<string, string> = {
 };
 
 export default function QualityScorecard({ profiles, projectQuality }: Props) {
+  const router = useRouter();
   // Compute focus score: how many distinct projects each dev works on
   const focusMap = useMemo(() => {
     const m = new Map<string, number>();
@@ -53,10 +55,13 @@ export default function QualityScorecard({ profiles, projectQuality }: Props) {
     {
       field: "display_name", headerName: "Développeur", flex: 2, minWidth: 140,
       sort: "asc" as const,
-      cellRenderer: (p: { data: { color: string; display_name: string } }) => (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      cellRenderer: (p: { data: { id: string; color: string; display_name: string } }) => (
+        <span
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+          onClick={() => router.push(`/board/developer/${p.data.id}`)}
+        >
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.data.color, flexShrink: 0 }} />
-          <span style={{ fontWeight: 600 }}>{p.data.display_name}</span>
+          <span style={{ fontWeight: 600, textDecoration: "underline", textDecorationStyle: "dotted" }}>{p.data.display_name}</span>
         </span>
       ),
     },
@@ -91,7 +96,7 @@ export default function QualityScorecard({ profiles, projectQuality }: Props) {
     },
     { field: "fixes_others", headerName: "Fixes autres", type: "numericColumn", width: 100, flex: 0, cellStyle: (p) => ({ color: (p.value as number) > 0 ? "#34d399" : "#334155" }) },
     { field: "fixed_by", headerName: "Corrigé par", type: "numericColumn", width: 100, flex: 0, cellStyle: (p) => ({ color: (p.value as number) > 0 ? "#fbbf24" : "#334155" }) },
-  ], []);
+  ], [router]);
 
   return (
     <div style={{ marginBottom: 24 }}>
