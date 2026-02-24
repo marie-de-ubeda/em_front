@@ -8,7 +8,7 @@ import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import Chip from "./Chip";
 import MiniBar from "./MiniBar";
-import type { TeamMonthly, DeveloperProfile, Incident, BaseBranch } from "../../lib/api";
+import type { TeamMonthly, DeveloperProfile, Incident, BaseBranch, RepoMatrixEntry } from "../../lib/api";
 
 const TOOLTIP_STYLE = { background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#e2e8f0", fontSize: 12 };
 const SEV_COLORS: Record<string, string> = { high: "#f87171", medium: "#fbbf24", low: "#34d399" };
@@ -18,9 +18,10 @@ interface Props {
   profiles: DeveloperProfile[];
   incidents: Incident[];
   baseBranches: BaseBranch[];
+  repoMatrix?: RepoMatrixEntry[];
 }
 
-export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBranches }: Props) {
+export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBranches, repoMatrix }: Props) {
   const [sel, setSel] = useState<string | null>(null);
 
   const totals = useMemo(() => {
@@ -119,7 +120,7 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #334155" }}>
-                    {["Dev", "Bugs", "Rollbacks", "Fix %", "Temps fix", "Fixes pour autres"].map((h) => (
+                    {["Dev", "Bugs", "Crit.", "High", "MV", "Rollbacks", "Fix %", "Temps fix", "Fixes pour autres"].map((h) => (
                       <th key={h} style={{ textAlign: "left", padding: "6px 8px", color: "#94a3b8", fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
                     ))}
                   </tr>
@@ -135,6 +136,9 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
                         onClick={() => setSel(p.developer_key)}>
                         <td style={{ padding: "6px 8px", color: p.color, fontWeight: 700 }}>{p.display_name}</td>
                         <td style={{ padding: "6px 8px", color: bugColor, fontWeight: 600 }}>{q.bugs_introduced}</td>
+                        <td style={{ padding: "6px 8px", color: q.critical_bugs > 0 ? "#e63946" : "#475569", fontWeight: 600 }}>{q.critical_bugs || "—"}</td>
+                        <td style={{ padding: "6px 8px", color: q.high_bugs > 0 ? "#f87171" : "#475569", fontWeight: 600 }}>{q.high_bugs || "—"}</td>
+                        <td style={{ padding: "6px 8px", color: q.total_impact_users > 0 ? "#fbbf24" : "#475569", fontWeight: 600 }}>{q.total_impact_users || "—"}</td>
                         <td style={{ padding: "6px 8px", color: rbColor, fontWeight: 600 }}>{q.rollbacks}</td>
                         <td style={{ padding: "6px 8px", color: "#e2e8f0" }}>{q.fix_ratio}%</td>
                         <td style={{ padding: "6px 8px", color: "#e2e8f0" }}>{q.avg_time_to_fix_days != null ? `${q.avg_time_to_fix_days}j` : "—"}</td>
@@ -214,6 +218,8 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
               {[
                 { icon: "🐛", label: "Bugs", value: p.quality_stats.bugs_introduced, color: p.quality_stats.bugs_introduced > 0 ? "#f87171" : "#34d399" },
+                { icon: "💀", label: "Critical", value: p.quality_stats.critical_bugs, color: p.quality_stats.critical_bugs > 0 ? "#e63946" : "#34d399" },
+                { icon: "🏠", label: "MV impactees", value: p.quality_stats.total_impact_users || "—", color: p.quality_stats.total_impact_users > 0 ? "#fbbf24" : "#94a3b8" },
                 { icon: "↩️", label: "Rollbacks", value: p.quality_stats.rollbacks, color: p.quality_stats.rollbacks > 0 ? "#fbbf24" : "#34d399" },
                 { icon: "🔧", label: "Fix %", value: `${p.quality_stats.fix_ratio}%`, color: "#818cf8" },
                 { icon: "⏱️", label: "Temps fix", value: p.quality_stats.avg_time_to_fix_days != null ? `${p.quality_stats.avg_time_to_fix_days}j` : "—", color: "#94a3b8" },
@@ -267,6 +273,34 @@ export default function TabPerPerson({ teamMonthly, profiles, incidents, baseBra
                   <div key={j} style={{ fontSize: 12, color: "#cbd5e1", padding: "3px 0", borderBottom: "1px solid #1a2332" }}>• {th}</div>
                 ))}
               </div>
+
+              {repoMatrix && (() => {
+                const devRepos = repoMatrix
+                  .filter((e) => e.developer_key === sel)
+                  .sort((a, b) => b.release_count - a.release_count)
+                  .slice(0, 8);
+                const maxRepo = devRepos[0]?.release_count || 1;
+                if (devRepos.length === 0) return null;
+                return (
+                  <div style={{ flex: "1 1 300px" }}>
+                    <h4 style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>📦 Top repos</h4>
+                    {devRepos.map((r) => (
+                      <div key={r.repo_name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: "#cbd5e1", minWidth: 100, textAlign: "right" }}>{r.repo_name}</span>
+                        <div style={{ flex: 1, height: 16, background: "#0f172a", borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{
+                            width: `${(r.release_count / maxRepo) * 100}%`, height: "100%",
+                            background: p.color, borderRadius: 3,
+                            display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 4,
+                          }}>
+                            <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>{r.release_count}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {pRollbacks.length > 0 && (

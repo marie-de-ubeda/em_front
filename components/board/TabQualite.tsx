@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import Card from "./Card";
 import SectionTitle from "./SectionTitle";
 import KPI from "./KPI";
 import Chip from "./Chip";
-import type { FixRatio, SupportTicket, Incident, BaseBranch, CrossContribution } from "../../lib/api";
+import type { FixRatio, SupportTicket, Incident, BaseBranch, CrossContribution, BugFixDetail, DeveloperProfile } from "../../lib/api";
 
 const TOOLTIP_STYLE = { background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#e2e8f0" };
 const SEV_COLORS: Record<string, string> = { high: "#f87171", medium: "#fbbf24", low: "#34d399" };
@@ -15,9 +15,11 @@ interface Props {
   incidents: Incident[];
   baseBranches: BaseBranch[];
   crossContributions: CrossContribution[];
+  bugFixes?: BugFixDetail[];
+  profiles?: DeveloperProfile[];
 }
 
-export default function TabQualite({ fixRatio, supportTickets, incidents, baseBranches, crossContributions }: Props) {
+export default function TabQualite({ fixRatio, supportTickets, incidents, baseBranches, crossContributions, bugFixes, profiles }: Props) {
   const [openRb, setOpenRb] = useState<number | null>(null);
   const [showBB, setShowBB] = useState(false);
   const [showCross, setShowCross] = useState(false);
@@ -45,7 +47,82 @@ export default function TabQualite({ fixRatio, supportTickets, incidents, baseBr
         <KPI label="Ratio feat/fix" value={ratioStr} color="#818cf8" sub="% sur l'année" />
         <KPI label="Base Branches" value={baseBranches.length} color="#fb923c" sub="dont 2 revertées" />
         <KPI label="Résolution" value="<24h" color="#34d399" sub="rollbacks" />
+        {bugFixes && bugFixes.length > 0 && (() => {
+          const valid = bugFixes.filter((b) => b.days_to_fix != null);
+          const avg = valid.length > 0 ? Math.round(valid.reduce((s, b) => s + b.days_to_fix!, 0) / valid.length * 10) / 10 : null;
+          const critical = bugFixes.filter((b) => b.severity === "critical").length;
+          const high = bugFixes.filter((b) => b.severity === "high").length;
+          return (
+            <>
+              {avg !== null && <KPI label="Temps moyen fix" value={`${avg}j`} color="#60a5fa" sub={`${bugFixes.length} bug-fixes traces`} />}
+              {critical > 0 && <KPI label="Bugs critiques" value={critical} color="#e63946" />}
+              {high > 0 && <KPI label="Bugs high" value={high} color="#f87171" />}
+            </>
+          );
+        })()}
       </div>
+
+      {bugFixes && profiles && bugFixes.length > 0 && (() => {
+        const sevWeight: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+        const devKeys = profiles.map((p) => p.developer_key);
+        const matrix: Record<string, Record<string, number>> = {};
+        for (const dk of devKeys) {
+          matrix[dk] = {};
+          for (const dk2 of devKeys) matrix[dk][dk2] = 0;
+        }
+        for (const b of bugFixes) {
+          if (matrix[b.author_key] && matrix[b.author_key][b.fixer_key] !== undefined) {
+            const w = sevWeight[b.severity ?? ""] || 1;
+            matrix[b.author_key][b.fixer_key] += w;
+          }
+        }
+
+        return (
+          <Card>
+            <SectionTitle icon="🔗">Matrice Bug-Fix (qui fixe les bugs de qui)</SectionTitle>
+            <p style={{ fontSize: 10, color: "#64748b", marginTop: 0 }}>Lignes = auteur du bug, Colonnes = fixeur. Pondere par severite (critical=4, high=3, medium=2, low=1).</p>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "6px 8px", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Auteur</th>
+                    {profiles.map((p) => (
+                      <th key={p.developer_key} style={{ padding: "6px 4px", color: p.color, borderBottom: "1px solid #334155", fontSize: 10, textAlign: "center" }}>
+                        {p.display_name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {profiles.map((author) => {
+                    const row = matrix[author.developer_key];
+                    if (!row || !Object.values(row).some((v) => v > 0)) return null;
+                    return (
+                      <tr key={author.developer_key}>
+                        <td style={{ padding: "4px 8px", color: author.color, borderBottom: "1px solid #1e293b", fontWeight: 600 }}>{author.display_name}</td>
+                        {profiles.map((fixer) => {
+                          const count = row[fixer.developer_key] || 0;
+                          const isDiag = author.developer_key === fixer.developer_key;
+                          return (
+                            <td key={fixer.developer_key} style={{
+                              padding: "4px", textAlign: "center", borderBottom: "1px solid #1e293b",
+                              background: count > 0 ? (isDiag ? "rgba(96,165,250,0.15)" : "rgba(251,147,36,0.15)") : undefined,
+                              color: count > 0 ? (isDiag ? "#60a5fa" : "#fb923c") : "#334155",
+                              fontWeight: count > 0 ? 700 : 400,
+                            }}>
+                              {count || ""}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+      })()}
 
       <Card>
         <SectionTitle icon="📊">Ratio Features vs Fixes par mois</SectionTitle>

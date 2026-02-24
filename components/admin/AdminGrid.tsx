@@ -61,9 +61,10 @@ interface Props {
   onRowClicked?: (row: Row) => void;
   checkboxSelection?: boolean;
   onCheckedChange?: (ids: number[]) => void;
+  refreshTrigger?: number;
 }
 
-export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, onDelete, onRefresh, onRowClicked, checkboxSelection, onCheckedChange }: Props) {
+export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, onDelete, onRefresh, onRowClicked, checkboxSelection, onCheckedChange, refreshTrigger }: Props) {
   const gridRef = useRef<AgGridReact>(null);
   const [dirty, setDirty] = useState<Map<number, Row>>(new Map());
   const [saving, setSaving] = useState(false);
@@ -157,6 +158,13 @@ export default function AdminGrid({ rows, columnDefs, tableName, onSave, onAdd, 
     }
     setSelectedId(selected?.[0]?.id ?? null);
   }, [checkboxSelection, onCheckedChange]);
+
+  // Redraw rows when refreshTrigger changes (e.g. after optimistic map update)
+  // redrawRows re-executes valueGetters + cellRenderers without losing sort/scroll
+  useEffect(() => {
+    if (refreshTrigger == null || refreshTrigger === 0) return;
+    gridRef.current?.api?.redrawRows();
+  }, [refreshTrigger]);
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

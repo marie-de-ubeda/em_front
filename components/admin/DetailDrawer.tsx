@@ -20,19 +20,25 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   onCreated?: (newRow: Row) => void;
+  onArchive?: (id: number, archive: boolean) => Promise<void>;
 }
 
 const TEXTAREA_FIELDS = new Set([
   "description", "changes", "detail", "lesson", "challenges", "result", "ai_summary",
+  "impact_description",
 ]);
 const JSON_FIELDS = new Set(["themes"]);
 const DATE_FIELDS = new Set(["release_date", "date"]);
-const BOOL_FIELDS = new Set(["is_em", "is_rollback"]);
+const BOOL_FIELDS = new Set(["is_em", "is_rollback", "is_archived", "is_roadmap"]);
 const READONLY_FIELDS = new Set(["id", "created_at", "release_url"]);
 // Key: "table:field" or just "field" for global
 const SELECT_FIELDS: Record<string, string[]> = {
   release_type: ["feat", "fix", "refacto", "chore"],
   "projects:type": ["Produit", "Tech", "Dette technique"],
+  "projects:impact": ["high", "medium", "low"],
+  "release_fixes:severity": ["low", "medium", "high", "critical"],
+  "release_fixes:detected_by": ["team", "client", "monitoring", "qa"],
+  "release_fixes:environment": ["front", "back", "api", "infra"],
 };
 
 function getSelectOptions(field: string, table: string): string[] | null {
@@ -225,10 +231,11 @@ function SearchSelect({ options, value, onChange, placeholder, style }: {
   );
 }
 
-export default function DetailDrawer({ row, table, meta, relations, columns, onClose, onSaved, onCreated }: Props) {
+export default function DetailDrawer({ row, table, meta, relations, columns, onClose, onSaved, onCreated, onArchive }: Props) {
   const isCreate = row.id == null;
   const [edited, setEdited] = useState<Row>({});
   const [saving, setSaving] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Related entity data per relation (keyed by relKey)
@@ -347,6 +354,20 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
       setGenerating(false);
     }
   }, [row.id]);
+
+  const handleArchive = useCallback(async () => {
+    if (!onArchive || !row.id) return;
+    setArchiving(true);
+    setError(null);
+    try {
+      const isArchived = "is_archived" in edited ? Boolean(edited.is_archived) : Boolean(row.is_archived);
+      await onArchive(row.id as number, !isArchived);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArchiving(false);
+    }
+  }, [onArchive, row.id, row.is_archived, edited]);
 
   const dirtyCount = Object.keys(edited).length;
 
@@ -590,6 +611,17 @@ export default function DetailDrawer({ row, table, meta, relations, columns, onC
         }}>
           {error && <div style={{ flex: 1, fontSize: 11, color: "#e63946", overflow: "hidden", textOverflow: "ellipsis" }}>{error}</div>}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {table === "projects" && !isCreate && onArchive && (
+              <button onClick={handleArchive} disabled={archiving}
+                style={{
+                  padding: "8px 14px", borderRadius: 6, border: `1px solid ${currentValue("is_archived") ? "#34d399" : "#e63946"}`,
+                  background: "transparent", color: currentValue("is_archived") ? "#34d399" : "#e63946",
+                  cursor: archiving ? "wait" : "pointer",
+                  fontSize: 11, fontWeight: 600, opacity: archiving ? 0.6 : 1,
+                }}>
+                {archiving ? "..." : currentValue("is_archived") ? "Restaurer" : "Archiver"}
+              </button>
+            )}
             {table === "projects" && !isCreate && (
               <button onClick={handleGenerateSummary} disabled={generating}
                 style={{

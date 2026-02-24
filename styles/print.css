@@ -1,0 +1,50 @@
+@media print {
+  /* Hide navigation and links */
+  .v2-layout a[href="/board-v1/overview"],
+  .v2-layout a[href="/admin"] {
+    display: none !important;
+  }
+
+  /* White background for printing */
+  .v2-layout {
+    background: #fff !important;
+    color: #1a1a1a !important;
+    padding: 0 !important;
+  }
+
+  .v2-layout * {
+    color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Keep KPI boxes visible with borders */
+  .v2-layout div[style*="background: #1e293b"],
+  .v2-layout div[style*="background:#1e293b"] {
+    background: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+  }
+
+  /* Ensure text is readable */
+  .v2-layout div[style*="color: #94a3b8"],
+  .v2-layout span[style*="color: #94a3b8"],
+  .v2-layout div[style*="color: #64748b"],
+  .v2-layout span[style*="color: #64748b"] {
+    color: #555 !important;
+  }
+
+  .v2-layout div[style*="color: #e2e8f0"],
+  .v2-layout span[style*="color: #e2e8f0"] {
+    color: #1a1a1a !important;
+  }
+
+  /* Avoid page breaks inside cards */
+  .v2-layout > div > div {
+    page-break-inside: avoid;
+  }
+
+  /* Hide tab navigation in print */
+  .v2-layout div[style*="gap: 4px"][style*="marginBottom: 20px"] {
+    display: none !important;
+  }
+}

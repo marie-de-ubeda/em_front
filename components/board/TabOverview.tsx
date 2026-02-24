@@ -22,6 +22,8 @@ interface Props {
   totalReleases: number;
   totalIncidents: number;
   totalBB: number;
+  totalPRs?: number;
+  coveragePct?: number;
 }
 
 const JIRA_COLORS: Record<string, string> = {
@@ -29,7 +31,7 @@ const JIRA_COLORS: Record<string, string> = {
   SOCLE: "#94a3b8", RUN: "#fbbf24", PVA: "#f472b6", B2C: "#60a5fa",
 };
 
-export default function TabOverview({ teamMonthly, profiles, jiraBreakdown, totalReleases, totalIncidents, totalBB }: Props) {
+export default function TabOverview({ teamMonthly, profiles, jiraBreakdown, totalReleases, totalIncidents, totalBB, totalPRs, coveragePct }: Props) {
   const devKeys = profiles.map((p) => p.display_name);
 
   const totals = useMemo(() => {
@@ -78,6 +80,8 @@ export default function TabOverview({ teamMonthly, profiles, jiraBreakdown, tota
         <KPI label="Total équipe" value={`~${totalReleases}`} color="#f8fafc" sub={`~${Math.round(totalReleases / 14)}/mois · 14 mois`} />
         <KPI label="Rollbacks" value={totalIncidents} color="#f87171" sub="1.5%" />
         <KPI label="Base Branches" value={totalBB} color="#fb923c" sub="features majeures" />
+        {totalPRs != null && <KPI label="PRs" value={totalPRs} color="#60a5fa" sub={`${totalReleases > 0 ? (totalPRs / totalReleases).toFixed(1) : "—"}/release`} />}
+        {coveragePct != null && <KPI label="Couverture projet" value={`${coveragePct}%`} color={coveragePct >= 70 ? "#34d399" : "#fb923c"} sub={`${100 - coveragePct}% orphelines`} />}
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>

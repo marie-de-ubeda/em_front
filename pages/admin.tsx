@@ -78,6 +78,7 @@ const TABLE_GROUPS: TableGroup[] = [
       { key: "incidents", label: "Incidents" },
       { key: "base_branches", label: "Base Branches" },
       { key: "cross_contributions", label: "Cross Contributions" },
+      { key: "sprints", label: "Sprints" },
     ],
   },
   {
@@ -132,19 +133,21 @@ function releaseLabel(r: { version: string; release_date: string; changes: strin
 }
 
 const ProjectCellEditor = forwardRef(function ProjectCellEditor(
-  props: { value: string; data: Row; meta: AdminMeta; releaseProjectMap: Map<number, number[]>; onToggleProject: (releaseId: number, projectId: number, add: boolean) => void; api: { stopEditing: () => void } },
+  props: { value: string; data: Row; meta: AdminMeta; releaseProjectMap: React.RefObject<Map<number, number[]>>; onToggleProject: (releaseId: number, projectId: number, add: boolean) => void; api: { stopEditing: () => void } },
   ref: React.Ref<{ getValue: () => string }>
 ) {
   const releaseId = props.data?.id as number;
-  const pids = props.releaseProjectMap.get(releaseId) || [];
+  const [pids, setPids] = useState<number[]>(() => props.releaseProjectMap.current.get(releaseId) || []);
+  const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useImperativeHandle(ref, () => ({
     getValue: () => props.value,
   }));
 
   useEffect(() => {
-    containerRef.current?.focus();
+    inputRef.current?.focus();
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         props.api.stopEditing();
@@ -155,37 +158,66 @@ const ProjectCellEditor = forwardRef(function ProjectCellEditor(
     return () => { clearTimeout(timer); document.removeEventListener("mousedown", handler); };
   }, [props.api]);
 
+  const filtered = search
+    ? props.meta.projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    : props.meta.projects;
+
+  // Show checked projects first, then the rest
+  const sorted = [...filtered].sort((a, b) => {
+    const aChecked = pids.includes(a.id) ? 0 : 1;
+    const bChecked = pids.includes(b.id) ? 0 : 1;
+    return aChecked - bChecked;
+  });
+
   return (
     <div ref={containerRef} tabIndex={0} style={{
       background: "#0a1a30", border: "1px solid #2e4a6e", borderRadius: 6,
-      padding: "4px 0", minWidth: 200, maxHeight: 260, overflowY: "auto",
+      minWidth: 220, maxHeight: 300, display: "flex", flexDirection: "column",
       boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
     }}>
-      {props.meta.projects.map((proj) => {
-        const checked = pids.includes(proj.id);
-        const color = hashColor(proj.name);
-        return (
-          <label key={proj.id} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
-            fontSize: 11, color: "#f1faee", cursor: "pointer",
-          }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#0f2440")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <input type="checkbox" checked={checked}
-              onChange={() => props.onToggleProject(releaseId, proj.id, !checked)}
-              style={{ accentColor: "#457b9d" }} />
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />
-              {proj.name}
-            </span>
-          </label>
-        );
-      })}
+      <input
+        ref={inputRef}
+        type="text" placeholder="Rechercher un projet..."
+        value={search} onChange={(e) => setSearch(e.target.value)}
+        style={{
+          width: "100%", padding: "6px 10px", border: "none", borderBottom: "1px solid #2e4a6e",
+          borderRadius: "6px 6px 0 0", background: "#000f25", color: "#f1faee",
+          fontSize: 11, outline: "none", boxSizing: "border-box",
+        }}
+      />
+      <div style={{ overflowY: "auto", maxHeight: 260, padding: "4px 0" }}>
+        {sorted.map((proj) => {
+          const checked = pids.includes(proj.id);
+          const color = hashColor(proj.name);
+          return (
+            <label key={proj.id} style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
+              fontSize: 11, color: "#f1faee", cursor: "pointer",
+            }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#0f2440")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+              <input type="checkbox" checked={checked}
+                onChange={() => {
+                  props.onToggleProject(releaseId, proj.id, !checked);
+                  setPids((prev) => checked ? prev.filter((id) => id !== proj.id) : [...prev, proj.id]);
+                }}
+                style={{ accentColor: "#457b9d" }} />
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />
+                {proj.name}
+              </span>
+            </label>
+          );
+        })}
+        {filtered.length === 0 && (
+          <div style={{ padding: "8px 10px", fontSize: 11, color: "#457b9d", textAlign: "center" }}>Aucun résultat</div>
+        )}
+      </div>
     </div>
   );
 });
 
-function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?: Map<number, number[]>, onToggleProject?: (releaseId: number, projectId: number, add: boolean) => void): ColDef[] {
+function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMapRef?: React.RefObject<Map<number, number[]>>, onToggleProject?: (releaseId: number, projectId: number, add: boolean) => void): ColDef[] {
   const devDropdown: Partial<ColDef> = meta ? {
     cellEditor: "agSelectCellEditor",
     cellEditorParams: { values: meta.developers.map((d) => d.id) },
@@ -238,28 +270,28 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
       return [
         { field: "version", maxWidth: 100, flex: 0 },
         {
-          field: "release_type", headerName: "Type", maxWidth: 70, filter: false,
+          field: "release_type", headerName: "Type", maxWidth: 80, filter: false,
           cellEditor: "agSelectCellEditor",
           cellEditorParams: { values: TYPE_OPTIONS },
+          singleClickEdit: true,
           cellRenderer: (p: { value: unknown }) => {
             const t = String(p.value ?? "");
             const color = TYPE_COLORS[t] || "#94a3b8";
             return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 600, color }}>{t}</span>;
           },
         },
-        { field: "is_rollback", headerName: "Rollback", maxWidth: 80, filter: false },
         {
           field: "release_date", headerName: "Date", maxWidth: 90, sort: "desc" as const, filter: false,
           valueFormatter: (p) => formatDateDMY(p.value),
         },
         {
-          field: "developer_id", headerName: "Dev", maxWidth: 110, filter: false,
+          field: "developer_id", headerName: "Dev", maxWidth: 140, filter: false,
           ...devDropdown,
           cellRenderer: meta ? (p: { value: unknown }) => {
             const dev = meta.developers.find((d) => d.id === Number(p.value));
             if (!dev) return String(p.value ?? "");
             const color = DEV_COLORS[dev.developer_key] || "#94a3b8";
-            return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />{dev.developer_key}</span>;
+            return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />{dev.alias || dev.developer_key}</span>;
           } : undefined,
         },
         {
@@ -281,23 +313,23 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
           field: "_projects", headerName: "Projects", minWidth: 100, maxWidth: 200,
           editable: !!onToggleProject, sortable: false, filter: false,
           cellEditorPopup: true,
-          cellEditor: meta && releaseProjectMap && onToggleProject
+          cellEditor: meta && releaseProjectMapRef && onToggleProject
             ? ProjectCellEditor
             : undefined,
-          cellEditorParams: meta && releaseProjectMap && onToggleProject
-            ? { meta, releaseProjectMap, onToggleProject }
+          cellEditorParams: meta && releaseProjectMapRef && onToggleProject
+            ? { meta, releaseProjectMap: releaseProjectMapRef, onToggleProject }
             : undefined,
           valueGetter: (p) => {
-            if (!meta || !releaseProjectMap) return "";
-            const pids = releaseProjectMap.get(p.data?.id as number) || [];
-            return pids.map((pid) => meta.projects.find((pr) => pr.id === pid)?.name ?? "").filter(Boolean).join(", ");
+            if (!meta || !releaseProjectMapRef) return "";
+            const pids = releaseProjectMapRef.current.get(p.data?.id as number) || [];
+            return pids.map((pid: number) => meta.projects.find((pr) => pr.id === pid)?.name ?? "").filter(Boolean).join(", ");
           },
-          cellRenderer: meta && releaseProjectMap ? (p: { data: Row }) => {
-            const pids = releaseProjectMap.get(p.data?.id as number) || [];
+          cellRenderer: meta && releaseProjectMapRef ? (p: { data: Row }) => {
+            const pids = releaseProjectMapRef.current.get(p.data?.id as number) || [];
             if (pids.length === 0) return <span style={{ color: "#457b9d", fontSize: 9 }}>+ projet</span>;
             return (
               <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap", alignItems: "center" }}>
-                {pids.map((pid) => {
+                {pids.map((pid: number) => {
                   const proj = meta.projects.find((pr) => pr.id === pid);
                   if (!proj) return null;
                   const color = hashColor(proj.name);
@@ -365,6 +397,13 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
     case "projects":
       return [
         { field: "name", minWidth: 160, sort: "asc" as const },
+        {
+          field: "is_archived", headerName: "Archivé", maxWidth: 80, filter: false,
+          cellRenderer: (p: { value: unknown }) => {
+            if (!p.value) return null;
+            return <span style={{ color: "#e63946", fontSize: 10, fontWeight: 600 }}>archivé</span>;
+          },
+        },
         { field: "is_roadmap", headerName: "Roadmap", maxWidth: 90 },
         { field: "period", minWidth: 100 },
         {
@@ -440,11 +479,44 @@ function getColumnDefs(table: string, meta: AdminMeta | null, releaseProjectMap?
         { field: "project_id", headerName: "Project", minWidth: 200, ...projectDropdown },
         { field: "developer_id", headerName: "Developer", minWidth: 160, ...devDropdown },
       ];
-    case "release_fixes":
+    case "release_fixes": {
+      const sevColors: Record<string, string> = { critical: "#e63946", high: "#f87171", medium: "#fbbf24", low: "#34d399" };
       return [
         idCol,
         { field: "fix_release_id", headerName: "Fix Release", minWidth: 250, ...releaseDropdown },
         { field: "bugged_release_id", headerName: "Bugged Release", minWidth: 250, ...releaseDropdown },
+        {
+          field: "severity", headerName: "Sev.", maxWidth: 90,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["low", "medium", "high", "critical"] },
+          cellStyle: (p: { value: unknown }) => {
+            const s = String(p.value ?? "");
+            return s && sevColors[s] ? { color: sevColors[s], fontWeight: 600 } : undefined;
+          },
+        },
+        { field: "impact_users", headerName: "MV", maxWidth: 70 },
+        {
+          field: "detected_by", headerName: "Detect.", maxWidth: 100,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["team", "client", "monitoring", "qa"] },
+        },
+        {
+          field: "environment", headerName: "Env.", maxWidth: 90,
+          cellEditor: "agSelectCellEditor",
+          cellEditorParams: { values: ["front", "back", "api", "infra"] },
+        },
+        {
+          field: "impact_description", headerName: "Description impact", minWidth: 200,
+          cellEditor: "agLargeTextCellEditor", cellEditorPopup: true,
+        },
+      ];
+    }
+    case "sprints":
+      return [
+        idCol,
+        { field: "number", headerName: "Sprint", maxWidth: 80, sort: "asc" as const },
+        { field: "start_date", headerName: "Début", minWidth: 120 },
+        { field: "end_date", headerName: "Fin", minWidth: 120 },
       ];
     default:
       return [idCol];
@@ -487,6 +559,9 @@ export default function AdminPage() {
   }, []);
   // Map: releaseId → project ids for the releases view
   const [releaseProjectMap, setReleaseProjectMap] = useState<Map<number, number[]>>(new Map());
+  const releaseProjectMapRef = useRef(releaseProjectMap);
+  releaseProjectMapRef.current = releaseProjectMap;
+  const [projectRefreshTrigger, setProjectRefreshTrigger] = useState(0);
   // Checkbox selection for bulk project association
   const [checkedReleaseIds, setCheckedReleaseIds] = useState<number[]>([]);
   const [bulkProjectId, setBulkProjectId] = useState<string>("");
@@ -506,15 +581,19 @@ export default function AdminPage() {
       map.get(rid)!.push(pid);
     }
     setReleaseProjectMap(map);
+    setProjectRefreshTrigger((n) => n + 1);
   }, []);
 
+  const initialLoadDone = useRef(false);
   const loadTable = useCallback(async (t: string) => {
-    setLoading(true);
+    // Only show loading skeleton on first load to avoid unmounting the grid (which loses sort/scroll)
+    if (!initialLoadDone.current) setLoading(true);
     setError(null);
     try {
       const data = await adminApi.list(t);
       setRows(data);
       if (t === "releases") await loadReleaseProjects();
+      initialLoadDone.current = true;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -523,6 +602,7 @@ export default function AdminPage() {
   }, [loadReleaseProjects]);
 
   useEffect(() => {
+    initialLoadDone.current = false;
     if (hydrated) loadTable(table);
   }, [table, loadTable, hydrated]);
 
@@ -550,36 +630,67 @@ export default function AdminPage() {
     const projectId = Number(bulkProjectId);
     try {
       for (const releaseId of checkedReleaseIds) {
-        // Skip if already linked
-        const existing = releaseProjectMap.get(releaseId) || [];
+        const existing = releaseProjectMapRef.current.get(releaseId) || [];
         if (existing.includes(projectId)) continue;
         await adminApi.create("release_projects", { release_id: releaseId, project_id: projectId });
       }
-      await loadReleaseProjects();
+      // Optimistic update
+      setReleaseProjectMap((prev) => {
+        const next = new Map(prev);
+        for (const releaseId of checkedReleaseIds) {
+          const pids = [...(prev.get(releaseId) || [])];
+          if (!pids.includes(projectId)) pids.push(projectId);
+          next.set(releaseId, pids);
+        }
+        return next;
+      });
+      setProjectRefreshTrigger((n) => n + 1);
       setCheckedReleaseIds([]);
       setBulkProjectId("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [bulkProjectId, checkedReleaseIds, releaseProjectMap, loadReleaseProjects]);
+  }, [bulkProjectId, checkedReleaseIds]);
+
+  const handleArchiveProject = useCallback(async (id: number, archive: boolean) => {
+    await adminApi.update("projects", id, { is_archived: archive });
+    setSelectedRow(null);
+    await loadTable(table);
+    // Refresh meta so archived projects disappear from dropdowns
+    const newMeta = await adminApi.meta();
+    setMeta(newMeta);
+  }, [table, loadTable]);
 
   const handleToggleProject = useCallback(async (releaseId: number, projectId: number, add: boolean) => {
     try {
       if (add) {
         await adminApi.create("release_projects", { release_id: releaseId, project_id: projectId });
       } else {
-        // Find the junction row to delete
         const rps = await adminApi.list("release_projects");
         const match = rps.find((rp) => rp.release_id === releaseId && rp.project_id === projectId);
         if (match) await adminApi.remove("release_projects", match.id as number);
       }
-      await loadReleaseProjects();
+      // Optimistic update: mutate the Map to avoid recreating columnDefs
+      setReleaseProjectMap((prev) => {
+        const next = new Map(prev);
+        const pids = [...(prev.get(releaseId) || [])];
+        if (add) {
+          if (!pids.includes(projectId)) pids.push(projectId);
+        } else {
+          const idx = pids.indexOf(projectId);
+          if (idx >= 0) pids.splice(idx, 1);
+        }
+        next.set(releaseId, pids);
+        return next;
+      });
+      setProjectRefreshTrigger((n) => n + 1);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [loadReleaseProjects]);
+  }, []);
 
-  const columnDefs = useMemo(() => getColumnDefs(table, meta, releaseProjectMap, handleToggleProject), [table, meta, releaseProjectMap, handleToggleProject]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const columnDefs = useMemo(() => getColumnDefs(table, meta, releaseProjectMapRef, handleToggleProject), [table, meta, handleToggleProject]);
   const drawerColumns = useMemo(() => columnDefs.map((c) => c.field).filter((f): f is string => !!f), [columnDefs]);
   const currentLabel = TABLE_GROUPS.flatMap((g) => g.tables).find((t) => t.key === table)?.label ?? table;
 
@@ -770,6 +881,7 @@ export default function AdminPage() {
             onRowClicked={setSelectedRow}
             checkboxSelection={table === "releases"}
             onCheckedChange={table === "releases" ? setCheckedReleaseIds : undefined}
+            refreshTrigger={projectRefreshTrigger}
           />
         )}
       </div>
@@ -782,9 +894,10 @@ export default function AdminPage() {
           meta={meta}
           relations={TABLE_RELATIONS[table] || []}
           columns={drawerColumns}
-          onClose={() => setSelectedRow(null)}
+          onClose={() => { setSelectedRow(null); loadTable(table); }}
           onSaved={() => { setSelectedRow(null); loadTable(table); }}
           onCreated={async (newRow) => { setSelectedRow(null); await loadTable(table); setSelectedRow(newRow); }}
+          onArchive={table === "projects" ? handleArchiveProject : undefined}
         />
       )}
     </div>
