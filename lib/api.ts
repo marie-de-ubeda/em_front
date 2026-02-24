@@ -50,6 +50,10 @@ export interface QualityStats {
   avg_time_to_fix_days: number | null;
   fixes_for_others: Record<string, number>;
   fixed_by_others: Record<string, number>;
+  severity_breakdown: Record<string, number>;
+  total_impact_users: number;
+  critical_bugs: number;
+  high_bugs: number;
 }
 
 export interface DeveloperProfile {
@@ -71,14 +75,17 @@ export interface ProjectRelease {
   release_id: number;
   version: string;
   release_date: string | null;
+  release_type: string | null;
   changes: string | null;
   repo_name: string;
+  sprint_number: number | null;
 }
 
 export interface Project {
   id: number;
   name: string;
   is_roadmap: boolean;
+  is_archived: boolean;
   period: string | null;
   impact: string | null;
   type: string | null;
@@ -131,10 +138,237 @@ export interface BoardSummary {
   total_tickets: number;
 }
 
+// --- New board types ---
+
+export interface RepoMatrixEntry {
+  developer_key: string;
+  display_name: string;
+  color: string;
+  repo_name: string;
+  release_count: number;
+}
+
+export interface ProjectCoverageDevEntry {
+  display_name: string;
+  developer_key: string;
+  color: string;
+  total: number;
+  associated: number;
+  orphan: number;
+  coverage_pct: number;
+}
+
+export interface ProjectCoverageMonthEntry {
+  month: string;
+  total: number;
+  associated: number;
+  orphan: number;
+  coverage_pct: number;
+}
+
+export interface ProjectCoverage {
+  perDeveloper: ProjectCoverageDevEntry[];
+  monthly: ProjectCoverageMonthEntry[];
+  topOrphanRepos: { repo_name: string; orphan_count: number }[];
+}
+
+export interface ReleaseCadence {
+  dayOfWeek: { day: string; count: number }[];
+  weekly: { week_start: string; count: number }[];
+  avgPerWeek: number;
+}
+
+export interface BugFixDetail {
+  id: number;
+  fix_release_id: number;
+  bugged_release_id: number;
+  fix_version: string;
+  fix_date: string | null;
+  fix_release_url: string | null;
+  fix_repo: string;
+  fixer_key: string;
+  fixer_name: string;
+  fixer_color: string;
+  bugged_version: string;
+  bugged_date: string | null;
+  bugged_release_url: string | null;
+  bugged_repo: string;
+  author_key: string;
+  author_name: string;
+  author_color: string;
+  days_to_fix: number | null;
+  severity: string | null;
+  impact_users: number | null;
+  impact_description: string | null;
+  detected_by: string | null;
+  environment: string | null;
+  bugged_changes: string | null;
+  fix_changes: string | null;
+  bugged_tickets: { key: string; url: string }[];
+  fix_tickets: { key: string; url: string }[];
+}
+
+export interface QuarterlyEntry {
+  quarter: string;
+  total: number;
+  feat: number;
+  fix: number;
+  refacto: number;
+  chore: number;
+}
+
+export interface QuarterlyDevEntry {
+  quarter: string;
+  developer_key: string;
+  display_name: string;
+  color: string;
+  count: number;
+}
+
+export interface QuarterlyData {
+  quarters: QuarterlyEntry[];
+  perDeveloper: QuarterlyDevEntry[];
+}
+
+// --- V2 board types ---
+
+export interface DeveloperQualityTrend {
+  developer_key: string;
+  display_name: string;
+  color: string;
+  quarter: string;
+  releases_count: number;
+  bugs_introduced: number;
+  bug_rate: number;
+  severity_weighted: number;
+  total_impact_users: number;
+  fixes_for_others: number;
+}
+
+export interface ProjectQualityContributor {
+  developer_key: string;
+  display_name: string;
+  color: string;
+  release_count: number;
+}
+
+export interface ProjectQuality {
+  project_id: number;
+  project_name: string;
+  type: string | null;
+  impact: string | null;
+  is_roadmap: boolean;
+  total_releases: number;
+  total_bugs: number;
+  bug_rate: number;
+  critical_high_bugs: number;
+  total_impact_users: number;
+  last_release_date: string | null;
+  last_bug_date: string | null;
+  contributors: ProjectQualityContributor[];
+}
+
+// --- Sprint types ---
+
+export interface Sprint {
+  id: number;
+  number: number;
+  start_date: string;
+  end_date: string;
+}
+
+export interface SprintDevBreakdown {
+  developer_key: string;
+  display_name: string;
+  color: string;
+  total: number;
+  feat: number;
+  fix: number;
+  refacto: number;
+  chore: number;
+  bugs: number;
+}
+
+export interface SprintMetrics {
+  sprint_number: number;
+  start_date: string;
+  end_date: string;
+  total_releases: number;
+  feat: number;
+  fix: number;
+  refacto: number;
+  chore: number;
+  bugs: number;
+  bug_rate: number;
+  critical_bugs: number;
+  total_impact_users: number;
+  rollbacks: number;
+  per_developer: SprintDevBreakdown[];
+}
+
+// --- Gantt types ---
+
+export interface GanttEntry {
+  developer_key: string;
+  display_name: string;
+  dev_color: string;
+  project_id: number;
+  project_name: string;
+  is_roadmap: boolean;
+  project_color: string;
+  sprint_id: number | null;
+  sprint_number: number | null;
+  sprint_start: string | null;
+  sprint_end: string | null;
+  release_count: number;
+}
+
+export interface GanttRelease {
+  release_id: number;
+  version: string;
+  release_date: string | null;
+  release_type: string | null;
+  release_url: string | null;
+  changes: string | null;
+  repo_name: string;
+  developer_key: string;
+  display_name: string;
+  dev_color: string;
+  sprint_number: number | null;
+  tickets: { key: string; url: string }[];
+  pull_requests: { number: number; title: string }[];
+}
+
+// --- Sprint-Project Matrix types ---
+
+export interface SprintProjectEntry {
+  releases: number;
+  bugs: number;
+  feat: number;
+  fix: number;
+  refacto: number;
+  chore: number;
+}
+
+export interface SprintProjectRow {
+  sprint_number: number;
+  start_date: string;
+  end_date: string;
+  total_releases: number;
+  total_bugs: number;
+  by_project: Record<string, SprintProjectEntry>;
+  orphan: SprintProjectEntry;
+}
+
+export interface SprintProjectMatrix {
+  projects: { id: number; name: string; is_roadmap: boolean }[];
+  matrix: SprintProjectRow[];
+}
+
 // --- Admin types ---
 
 export interface AdminMeta {
-  developers: { id: number; display_name: string; developer_key: string }[];
+  developers: { id: number; display_name: string; developer_key: string; alias: string | null }[];
   repositories: { id: number; name: string }[];
   releases: { id: number; version: string; release_date: string; changes: string | null; repo_name: string | null }[];
   baseBranches: { id: number; name: string }[];
@@ -177,23 +411,37 @@ export const adminApi = {
 };
 
 export const api = {
-  teamMonthly: () => fetchJSON<TeamMonthly[]>("/api/board/team-monthly"),
-  fixRatio: () => fetchJSON<FixRatio[]>("/api/board/fix-ratio"),
-  supportTickets: () =>
-    fetchJSON<SupportTicket[]>("/api/board/support-tickets"),
+  teamMonthly: (p = "") => fetchJSON<TeamMonthly[]>(`/api/board/team-monthly${p}`),
+  fixRatio: (p = "") => fetchJSON<FixRatio[]>(`/api/board/fix-ratio${p}`),
+  supportTickets: () => fetchJSON<SupportTicket[]>("/api/board/support-tickets"),
   jiraBreakdown: () => fetchJSON<JiraBreakdown[]>("/api/board/jira-breakdown"),
   developers: () => fetchJSON<Developer[]>("/api/board/developers"),
-  developerProfiles: () =>
-    fetchJSON<DeveloperProfile[]>("/api/board/developer-profiles"),
-  projects: () => fetchJSON<Project[]>("/api/board/projects"),
-  incidents: () => fetchJSON<Incident[]>("/api/board/incidents"),
+  developerProfiles: (p = "") => fetchJSON<DeveloperProfile[]>(`/api/board/developer-profiles${p}`),
+  projects: (p = "") => fetchJSON<Project[]>(`/api/board/projects${p}`),
+  incidents: (p = "") => fetchJSON<Incident[]>(`/api/board/incidents${p}`),
   baseBranches: () => fetchJSON<BaseBranch[]>("/api/board/base-branches"),
   generateSummary: (projectId: number) =>
     fetchJSONWithBody<{ ai_summary: string }>(`/api/board/projects/${projectId}/generate-summary`, {
       method: "POST",
     }),
-  crossContributions: () =>
-    fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
-  summary: () => fetchJSON<BoardSummary[]>("/api/board/summary"),
+  crossContributions: () => fetchJSON<CrossContribution[]>("/api/board/cross-contributions"),
+  summary: (p = "") => fetchJSON<BoardSummary[]>(`/api/board/summary${p}`),
+  repoMatrix: (p = "") => fetchJSON<RepoMatrixEntry[]>(`/api/board/repo-matrix${p}`),
+  projectCoverage: (p = "") => fetchJSON<ProjectCoverage>(`/api/board/project-coverage${p}`),
+  releaseCadence: (p = "") => fetchJSON<ReleaseCadence>(`/api/board/release-cadence${p}`),
+  bugFixDetail: (p = "") => fetchJSON<BugFixDetail[]>(`/api/board/bug-fix-detail${p}`),
+  quarterly: (p = "") => fetchJSON<QuarterlyData>(`/api/board/quarterly${p}`),
+  analyzeTab: (tab: string, data: object) =>
+    fetchJSONWithBody<{ analysis: string }>("/api/board/analyze-tab", {
+      method: "POST",
+      body: JSON.stringify({ tab, data }),
+    }),
+  developerQualityTrend: (p = "") => fetchJSON<DeveloperQualityTrend[]>(`/api/board/developer-quality-trend${p}`),
+  projectQuality: (p = "") => fetchJSON<ProjectQuality[]>(`/api/board/project-quality${p}`),
+  sprints: () => fetchJSON<Sprint[]>("/api/board/sprints"),
+  sprintMetrics: (p = "") => fetchJSON<SprintMetrics[]>(`/api/board/sprint-metrics${p}`),
+  sprintProjectMatrix: (p = "") => fetchJSON<SprintProjectMatrix>(`/api/board/sprint-project-matrix${p}`),
+  ganttData: (p = "") => fetchJSON<GanttEntry[]>(`/api/board/gantt-data${p}`),
+  ganttReleases: (p: string) => fetchJSON<GanttRelease[]>(`/api/board/gantt-releases${p}`),
 };
 
