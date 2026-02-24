@@ -16,6 +16,8 @@ interface BoardFilterContextValue {
   sprints: Sprint[];
   queryParams: string;
   filterLabel: string;
+  filterFrom: string | null;
+  filterTo: string | null;
   hydrated: boolean;
 }
 
@@ -27,6 +29,8 @@ const BoardFilterContext = createContext<BoardFilterContextValue>({
   sprints: [],
   queryParams: "",
   filterLabel: "",
+  filterFrom: null,
+  filterTo: null,
   hydrated: false,
 });
 
@@ -94,8 +98,26 @@ export function BoardFilterProvider({ children }: { children: React.ReactNode })
     return "Toutes les données · Janvier 2025 → Février 2026";
   }, [filter, sprints]);
 
+  const filterFrom = useMemo(() => {
+    if (filter.mode === "sprint" && filter.sprintId) {
+      const s = sprints.find((sp) => sp.id === filter.sprintId);
+      return s?.start_date || null;
+    }
+    if (filter.mode === "range" && filter.from) return filter.from;
+    return null;
+  }, [filter, sprints]);
+
+  const filterTo = useMemo(() => {
+    if (filter.mode === "sprint" && filter.sprintId) {
+      const s = sprints.find((sp) => sp.id === filter.sprintId);
+      return s?.end_date || null;
+    }
+    if (filter.mode === "range" && filter.to) return filter.to;
+    return null;
+  }, [filter, sprints]);
+
   return (
-    <BoardFilterContext.Provider value={{ filter, setFilter, sprints, queryParams, filterLabel, hydrated }}>
+    <BoardFilterContext.Provider value={{ filter, setFilter, sprints, queryParams, filterLabel, filterFrom, filterTo, hydrated }}>
       {children}
     </BoardFilterContext.Provider>
   );

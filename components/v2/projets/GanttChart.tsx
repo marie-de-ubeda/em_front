@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import type { GanttEntry, Sprint } from "../../../lib/api";
+import { useBoardFilter } from "../../../lib/boardFilterContext";
 import GanttDrawer from "./GanttDrawer";
 
 type Mode = "by-developer" | "by-project";
@@ -31,6 +32,7 @@ interface DrawerState {
 }
 
 export default function GanttChart({ data, sprints }: Props) {
+  const { filterFrom, filterTo } = useBoardFilter();
   const [mode, setMode] = useState<Mode>("by-project");
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
@@ -66,7 +68,7 @@ export default function GanttChart({ data, sprints }: Props) {
     const active = sortedSprints.filter((s) => sprintIdsWithData.has(s.id));
 
     type CellSeg = { label: string; color: string; releases: number; developerKey: string; projectId: number };
-    type Row = { key: string; label: string; color: string; cells: Map<number, CellSeg[]> };
+    type Row = { key: string; label: string; color: string; isNew: boolean; cells: Map<number, CellSeg[]> };
 
     const rowMap = new Map<string, Row>();
 
@@ -75,7 +77,8 @@ export default function GanttChart({ data, sprints }: Props) {
         if (!d.sprint_id) continue;
         const key = String(d.project_id);
         if (!rowMap.has(key)) {
-          rowMap.set(key, { key, label: d.project_name, color: d.project_color, cells: new Map() });
+          const isNew = !!(filterFrom && d.first_release_date && d.first_release_date >= filterFrom && (!filterTo || d.first_release_date <= filterTo));
+          rowMap.set(key, { key, label: d.project_name, color: d.project_color, isNew, cells: new Map() });
         }
         const row = rowMap.get(key)!;
         if (!row.cells.has(d.sprint_id)) row.cells.set(d.sprint_id, []);
@@ -92,7 +95,7 @@ export default function GanttChart({ data, sprints }: Props) {
         if (!d.sprint_id) continue;
         const key = d.developer_key;
         if (!rowMap.has(key)) {
-          rowMap.set(key, { key, label: d.display_name, color: d.dev_color, cells: new Map() });
+          rowMap.set(key, { key, label: d.display_name, color: d.dev_color, isNew: false, cells: new Map() });
         }
         const row = rowMap.get(key)!;
         if (!row.cells.has(d.sprint_id)) row.cells.set(d.sprint_id, []);
@@ -108,7 +111,7 @@ export default function GanttChart({ data, sprints }: Props) {
 
     const builtRows = [...rowMap.values()].sort((a, b) => a.label.localeCompare(b.label));
     return { rows: builtRows, activeSprints: active };
-  }, [data, sortedSprints, mode]);
+  }, [data, sortedSprints, mode, filterFrom, filterTo]);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent, rowLabel: string, segLabel: string, sprintLabel: string, releases: number) => {
@@ -281,6 +284,7 @@ export default function GanttChart({ data, sprints }: Props) {
                   title={row.label}
                 >
                   {row.label}
+                  {row.isNew && <span style={{ fontSize: 7, fontWeight: 700, marginLeft: 4, padding: "0 3px", borderRadius: 2, background: "#38bdf822", color: "#38bdf8", verticalAlign: "middle" }}>N</span>}
                 </td>
                 {activeSprints.map((s) => {
                   const segs = row.cells.get(s.id);

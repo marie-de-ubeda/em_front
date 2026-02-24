@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { BugFixDetail, DeveloperProfile, Incident, Project } from "../../lib/api";
+import type { BugFixDetail, DeveloperProfile, Project } from "../../lib/api";
 import { api } from "../../lib/api";
 import { useBoardFilter } from "../../lib/boardFilterContext";
 import V2Layout from "../../components/v2/V2Layout";
@@ -7,13 +7,11 @@ import BugTraceabilityKPIs from "../../components/v2/qualite/BugTraceabilityKPIs
 import TimeToFixBySeverity from "../../components/v2/qualite/TimeToFixBySeverity";
 import BugFixMatrix from "../../components/v2/qualite/BugFixMatrix";
 import BugFixDetailTable from "../../components/v2/qualite/BugFixDetailTable";
-import IncidentTimeline from "../../components/v2/qualite/IncidentTimeline";
 import V2MethodologyNote from "../../components/v2/V2MethodologyNote";
 
 interface Data {
   bugFixes: BugFixDetail[];
   profiles: DeveloperProfile[];
-  incidents: Incident[];
   projects: Project[];
 }
 
@@ -37,10 +35,9 @@ export default function QualitePage() {
     Promise.all([
       api.bugFixDetail(queryParams),
       api.developerProfiles(queryParams),
-      api.incidents(queryParams),
       api.projects(queryParams),
-    ]).then(([bugFixes, profiles, incidents, projects]) => {
-      setData({ bugFixes, profiles, incidents, projects });
+    ]).then(([bugFixes, profiles, projects]) => {
+      setData({ bugFixes, profiles, projects });
       setLoading(false);
     });
   }, [queryParams, hydrated]);
@@ -59,7 +56,6 @@ export default function QualitePage() {
       <TimeToFixBySeverity bugFixes={data.bugFixes} />
       <BugFixMatrix bugFixes={data.bugFixes} profiles={data.profiles} />
       <BugFixDetailTable bugFixes={data.bugFixes} projects={data.projects} filterDev={null} />
-      <IncidentTimeline incidents={data.incidents} />
       <V2MethodologyNote items={METHODOLOGY} />
     </V2Layout>
   );

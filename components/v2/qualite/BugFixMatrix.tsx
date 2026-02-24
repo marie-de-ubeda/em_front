@@ -9,10 +9,8 @@ interface Props {
 }
 
 export default function BugFixMatrix({ bugFixes, profiles }: Props) {
-  const { devKeys, matrix, maxVal } = useMemo(() => {
-    const keys = [...profiles]
-      .sort((a, b) => a.display_name.localeCompare(b.display_name))
-      .map((p) => ({ key: p.developer_key, name: p.display_name, color: p.color }));
+  const { devs, matrix, maxVal, activeAuthors } = useMemo(() => {
+    const sorted = [...profiles].sort((a, b) => a.display_name.localeCompare(b.display_name));
 
     const m = new Map<string, number>();
     for (const b of bugFixes) {
@@ -24,54 +22,70 @@ export default function BugFixMatrix({ bugFixes, profiles }: Props) {
     let max = 0;
     for (const v of m.values()) if (v > max) max = v;
 
-    return { devKeys: keys, matrix: m, maxVal: max || 1 };
+    // Only show rows for authors who have at least one bug
+    const active = new Set<string>();
+    for (const b of bugFixes) active.add(b.author_key);
+
+    return { devs: sorted, matrix: m, maxVal: max || 1, activeAuthors: active };
   }, [bugFixes, profiles]);
 
-  if (devKeys.length === 0) return null;
+  if (devs.length === 0) return null;
 
   return (
     <div style={{ marginBottom: 24 }}>
       <h3 style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", marginBottom: 4 }}>
-        Matrice bugs : qui corrige les bugs de qui
+        Matrice Bug-Fix (qui fixe les bugs de qui)
       </h3>
       <p style={{ fontSize: 10, color: "#64748b", marginBottom: 8 }}>
-        Pondéré par sévérité (critical×4, high×3, medium×2, low×1). Lignes = auteur du bug, colonnes = correcteur.
+        Lignes = auteur du bug, Colonnes = fixeur. Pondéré par sévérité (critical×4, high×3, medium×2, low×1).
       </p>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
           <thead>
             <tr>
-              <th style={{ padding: "4px 8px", fontSize: 9, color: "#64748b" }}>Auteur ↓ / Fixeur →</th>
-              {devKeys.map((d) => (
-                <th key={d.key} style={{ padding: "4px 6px", fontSize: 9, color: d.color, fontWeight: 600, textAlign: "center" }}>
-                  {d.name.split(" ").map((n) => n[0]).join("")}
+              <th style={{ textAlign: "left", padding: "6px 8px", color: "#94a3b8", borderBottom: "1px solid #334155" }}>Auteur</th>
+              {devs.map((d) => (
+                <th key={d.developer_key} style={{
+                  padding: "6px 4px", color: d.color, borderBottom: "1px solid #334155",
+                  fontSize: 10, textAlign: "center", fontWeight: 600,
+                }}>
+                  {d.display_name}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {devKeys.map((author) => (
-              <tr key={author.key}>
-                <td style={{ padding: "4px 8px", fontSize: 10, color: author.color, fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {author.name}
-                </td>
-                {devKeys.map((fixer) => {
-                  const v = matrix.get(`${author.key}:${fixer.key}`) || 0;
-                  const opacity = v > 0 ? 0.2 + (v / maxVal) * 0.8 : 0;
-                  const isSelf = author.key === fixer.key;
-                  return (
-                    <td key={fixer.key} style={{
-                      padding: "4px 6px", textAlign: "center", fontSize: 10, fontWeight: v > 0 ? 700 : 400,
-                      color: v > 0 ? "#e2e8f0" : "#334155",
-                      background: v > 0 ? `rgba(${isSelf ? "251,191,36" : "99,102,241"},${opacity})` : "transparent",
-                      borderRadius: 4,
-                    }}>
-                      {v > 0 ? v : "·"}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {devs.map((author) => {
+              if (!activeAuthors.has(author.developer_key)) return null;
+              return (
+                <tr key={author.developer_key}>
+                  <td style={{
+                    padding: "4px 8px", color: author.color, borderBottom: "1px solid #1e293b",
+                    fontWeight: 600, whiteSpace: "nowrap",
+                  }}>
+                    {author.display_name}
+                  </td>
+                  {devs.map((fixer) => {
+                    const v = matrix.get(`${author.developer_key}:${fixer.developer_key}`) || 0;
+                    const isSelf = author.developer_key === fixer.developer_key;
+                    return (
+                      <td key={fixer.developer_key} style={{
+                        padding: "4px", textAlign: "center", borderBottom: "1px solid #1e293b",
+                        background: v > 0
+                          ? (isSelf ? "rgba(96,165,250,0.15)" : "rgba(251,147,36,0.15)")
+                          : undefined,
+                        color: v > 0
+                          ? (isSelf ? "#60a5fa" : "#fb923c")
+                          : "#334155",
+                        fontWeight: v > 0 ? 700 : 400,
+                      }}>
+                        {v > 0 ? v : ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -12,6 +12,7 @@ interface Props {
   project: Project;
   bugFixes: BugFixDetail[];
   contributors: ProjectQualityContributor[];
+  isNew?: boolean;
   onClose: () => void;
 }
 
@@ -477,7 +478,7 @@ function BugsByVersion({ bugs }: { bugs: BugFixDetail[] }) {
   );
 }
 
-export default function ProjectDetailDrawer({ project, bugFixes, contributors, onClose }: Props) {
+export default function ProjectDetailDrawer({ project, bugFixes, contributors, isNew, onClose }: Props) {
   const projectBugs = useMemo(() =>
     bugFixes.filter((b) =>
       project.releases.some((r) => r.version === b.bugged_version && r.repo_name === b.bugged_repo)
@@ -532,6 +533,9 @@ export default function ProjectDetailDrawer({ project, bugFixes, contributors, o
               <h2 style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0", margin: 0 }}>{project.name}</h2>
               {project.is_roadmap && (
                 <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "#34d39922", color: "#34d399" }}>Roadmap</span>
+              )}
+              {isNew && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "#38bdf822", color: "#38bdf8" }}>new</span>
               )}
               {project.type && (
                 <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 4, background: "#1e293b", color: "#94a3b8" }}>{project.type}</span>

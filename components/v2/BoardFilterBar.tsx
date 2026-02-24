@@ -1,8 +1,8 @@
 import { useBoardFilter } from "../../lib/boardFilterContext";
 
-function formatShort(d: string): string {
+function formatFull(d: string): string {
   const dt = new Date(d);
-  return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}`;
+  return `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
 }
 
 export default function BoardFilterBar() {
@@ -43,7 +43,7 @@ export default function BoardFilterBar() {
         <optgroup label="Sprints">
           {[...sprints].reverse().map((s) => (
             <option key={s.id} value={String(s.id)}>
-              Sprint {s.number} ({formatShort(s.start_date)} → {formatShort(s.end_date)})
+              Sprint {s.number} ({formatFull(s.start_date)} → {formatFull(s.end_date)})
             </option>
           ))}
         </optgroup>

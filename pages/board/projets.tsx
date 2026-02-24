@@ -24,7 +24,7 @@ const METHODOLOGY = [
 ];
 
 export default function ProjetsPage() {
-  const { queryParams, hydrated, sprints } = useBoardFilter();
+  const { queryParams, hydrated, sprints, filterFrom, filterTo } = useBoardFilter();
   const [data, setData] = useState<Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
@@ -68,6 +68,10 @@ export default function ProjetsPage() {
           project={selectedProjectData}
           bugFixes={data.bugFixes}
           contributors={data.projectQuality.find((q) => q.project_id === selectedProject)?.contributors || []}
+          isNew={!!(filterFrom && (() => {
+            const pq = data.projectQuality.find((q) => q.project_id === selectedProject);
+            return pq?.first_release_date && pq.first_release_date >= filterFrom && (!filterTo || pq.first_release_date <= filterTo);
+          })())}
           onClose={() => setSelectedProject(null)}
         />
       )}
